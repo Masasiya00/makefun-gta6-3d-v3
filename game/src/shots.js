@@ -9,9 +9,30 @@
 // composition survives however much simulation time passes before the
 // screenshot is taken.
 //
-// Round 6 shots (four themes): beach (5-star chase on the coast road),
-// city (on foot downtown, pistol out), countryside (farm run on the
-// country road) and airport (on foot on the runway, 5 stars, rifle out).
+// Round 6e — TOTAL REDO after the GTA San Andreas reference photos
+// (user order 2026-11-19 ~23:56 WIB): every shot is staged at GOLDEN
+// HOUR (17:35-17:55), the orange-haze light of the reference, with the
+// San Andreas detail language throughout — pitched shingle roofs, stucco
+// walls, white-framed reflective windows, palms, brick walls, power poles
+// with sagging wires, billboards, and a low sun over the bay.
+//
+//   1-beach: on foot on the sand at golden hour, ocean ahead, palms,
+//     beach cottages, umbrellas, lifeguard tower. Wanted 0 — NO stars,
+//     NO police, NO helicopter, NO roadblocks (user correction: no car
+//     in the sea, no 5-star response on the beach). MAKO out, HUD kept.
+//   2-city: the "Ah shit, here we go again" shot — Mara from BEHIND in
+//     a white tank top, walking a narrow DIRT ALLEY between tall BRICK
+//     walls; the alley mouth opens onto the SA neighbourhood — pitched
+//     roofs, the curved concrete freeway overpass, billboards, power
+//     lines, downtown skyline in the orange haze. 2 stars (kept).
+//   3-countryside: farm run on the country road at golden hour —
+//     farmhouse, red barn, silo, hay bales, fields, dirt track, wood
+//     fences. Helicopter HIGH above the red car (user: r6c flew too
+//     low), spotlight cone still landing on the car. 1 star, AIR-1.
+//   4-airport: ONE realistic airliner on final approach, gear down,
+//     nose toward the camera — the parked planes are GONE (user: only
+//     one plane, the flying one). Runway, markings, edge lights, tower
+//     and hangars stay. 5 stars, no helicopter.
 import { startMission } from './missions.js';
 import { playerRoad, alongOf, crossOf } from './police.js';
 
@@ -97,11 +118,12 @@ function stageShotTraffic(state) {
 export function applyShot(state, shotName, audio) {
   state.started = true;
   state.paused = false;
-  // r6c: restage flags — reset every shot so a staged heli / flying plane
-  // never leaks into another shot.
+  // r6e: restage flags — reset every shot so a staged heli / flying plane
+  // / tank-top outfit never leaks into another shot.
   state.shotNoHeli = false;
   state.shotForceHeli = false;
   state.flyPlane = null;
+  state.shotTankTop = false;
   const rosa = state.cars.find((c) => c.id === 'rosa');
   if (shotName === 'chase') {
     state.clockMin = 18 * 60 + 32;
@@ -131,10 +153,12 @@ export function applyShot(state, shotName, audio) {
     state.armour = 45;
     stageShotTraffic(state);
   } else if (shotName === 'beach') {
-    // 1-beach: on foot on the sand at the water's edge at golden hour —
-    // ocean ahead, palms and beach umbrellas around, five stars and the
-    // helicopter over the water. The camera looks west, so the sea is in
-    // the frame instead of behind it.
+    // 1-beach (r6e): on foot on the sand at golden hour, facing the sea
+    // to the west — palms, beach cottages at the frame edges, umbrellas,
+    // lifeguard tower, yachts, low sun over the water. WANTED 0 (user
+    // correction): no stars, no SBPD panel, no helicopter, no roadblocks,
+    // no police anywhere near the water — nothing that could read as a
+    // car in the sea. MAKO out, weapon HUD kept.
     state.clockMin = 17 * 60 + 35;
     state.player.x = -332;
     state.player.z = 85;
@@ -146,14 +170,12 @@ export function applyShot(state, shotName, audio) {
     state.cameraLookUp = false;
     state.money = 86250;
     state.respect = 640;
-    state.wanted = 5;
-    state.heat = 100;
+    state.wanted = 0;
+    state.heat = 0;
     state.heliDist = 24;
     state.heliAlt = 16;
-    // r6c (user order 23:04 WIB): no helicopter over the beach — five
-    // stars and the chase stay, the heli and its spotlight go.
     state.shotNoHeli = true;
-    state.dialogue = { speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'Five stars on Palm Beach, Mara — lose them on the coast road!' };
+    state.dialogue = { speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'Golden hour on Palm Beach, Mara — no heat, just the bay.' };
     state.dialogueT = 999;
     state.weaponsOwned = [true, true, true, true, true];
     state.ammo = [Infinity, 72, 150, 24, 60];
@@ -162,19 +184,41 @@ export function applyShot(state, shotName, audio) {
     state.radio = 0;
     state.health = 88;
     state.armour = 45;
+    // A couple of beachgoers strolling the sand, clear of the player.
+    const walkers = [[-342, 62, -Math.PI / 2], [-340, 108, -Math.PI / 2]];
+    for (let i = 0; i < walkers.length && i < state.peds.length; i++) {
+      const p = state.peds[i];
+      p.x = walkers[i][0];
+      p.z = walkers[i][1];
+      p.angle = walkers[i][2];
+      p.speed = 1.2;
+      p.panic = 0;
+      p.wait = 0;
+      p.phase = i * 0.7;
+    }
   } else if (shotName === 'city') {
-    state.clockMin = 12 * 60 + 20;
+    // 2-city (r6e): the GTA SA alley shot. Mara from BEHIND in a white
+    // tank top (state.shotTankTop, cap off), walking a narrow dirt alley
+    // between tall brick walls at x = 20 / 28, z = -40..34, facing north
+    // (-z). The alley mouth opens onto the SA neighbourhood: pitched-roof
+    // houses, the curved freeway overpass, billboards, power lines and
+    // the downtown skyline in the orange haze. Camera is a dedicated
+    // elevated behind-character branch in main.js. 2 stars kept; the two
+    // pursuit cars stage on the x = 0 road west of the alley.
+    state.clockMin = 17 * 60 + 50;
     state.player.x = 24;
-    state.player.z = 6;
+    state.player.z = 26;
     state.player.angle = Math.PI;
     state.player.inCar = false;
     state.player.onFoot = true;
     state.player.carId = null;
     state.cameraYaw = Math.PI;
+    state.cameraLookUp = false;
     state.money = 1240;
     state.respect = 60;
     state.wanted = 2;
     state.heat = 40;
+    state.shotTankTop = true;
     state.weaponsOwned = [true, true, false, false, false];
     state.ammo = [Infinity, 36, 0, 0, 0];
     state.magAmmo = [Infinity, 12, 0, 0, 0];
@@ -182,19 +226,34 @@ export function applyShot(state, shotName, audio) {
     state.dialogue = null;
     state.health = 100;
     state.armour = 20;
+    // Peds: one ahead in the alley, two on the street past the mouth.
     const spots = [
-      [false, 0, 1, -20, 1], [false, 0, -1, 0, -1], [false, 0, 1, 20, 1], [false, 0, -1, 40, -1],
-      [true, 0, 1, -30, 1], [true, 0, -1, -10, -1], [true, 0, 1, 10, 1], [true, 0, -1, 30, -1],
+      [24, -8, Math.PI, 0], [14, -52, Math.PI / 2, 1], [34, -54, -Math.PI / 2, 2],
+      [8, -48, 0, 3], [40, -48, Math.PI, 4],
     ];
-    for (let i = 0; i < 8 && i < state.peds.length; i++) {
-      const s = spots[i];
-      stagePed(state.peds[i], s[0], s[1], s[2], s[3], s[4], i);
+    for (let i = 0; i < spots.length && i < state.peds.length; i++) {
+      const p = state.peds[i];
+      p.x = spots[i][0];
+      p.z = spots[i][1];
+      p.angle = spots[i][2];
+      p.speed = 1.2 + (spots[i][3] % 2) * 0.4;
+      p.panic = 0;
+      p.wait = 0;
+      p.phase = i * 0.7;
     }
   } else if (shotName === 'countryside') {
-    // 3-countryside: farm run on the country road east of town at noon —
-    // crop fields and the farmhouse to the south, hay bales by the road,
-    // one star on the tail.
-    state.clockMin = 12 * 60 + 5;
+    // 3-countryside (r6e): farm run on the country road east of town at
+    // GOLDEN HOUR — crop fields and the farmhouse to the south, red barn
+    // + silo, hay bales by the road, dirt track, wood fences, power poles
+    // with sagging wires. One star on the tail, helicopter HIGH above
+    // the red car (user: r6c flew too low) — heliDist 18 / heliAlt 13,
+    // and police.js parks a forced heli higher (hy = alt - 3). The cone
+    // and the light pool still land on the car. (v1: alt 24 put the body
+    // above the top of the frame; v2: alt 15 / hy 12 still cropped the
+    // rotor against the WANTED stars — the chase camera only sees ~16
+    // deg above horizontal — so alt 13 / hy 10 parks the whole heli
+    // high in the frame, clear of the stars, well above the r6c hy 5.)
+    state.clockMin = 17 * 60 + 40;
     state.player.x = 165;
     state.player.z = 180;
     state.player.angle = Math.PI / 2;
@@ -208,15 +267,9 @@ export function applyShot(state, shotName, audio) {
     state.cameraLookUp = false;
     state.wanted = 1;
     state.heat = 20;
-    // r6c (user order 23:04 WIB): a helicopter hovers right over the red
-    // car with its spotlight on it — forced on at 1 star. Frozen orbit
-    // parks it ahead = dist * 1.1, 5 m to the side, at alt - 7: with
-    // dist 16 / alt 12 the body sits ~55-70% up the frame, fully inside
-    // (v1 at 10/15 was cropped by the top edge and covered the WANTED
-    // label). Cone + pool still land on the car.
     state.shotForceHeli = true;
-    state.heliDist = 16;
-    state.heliAlt = 12;
+    state.heliDist = 18;
+    state.heliAlt = 13;
     state.dialogue = { speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'Country roads, Mara — the farm run pays if you keep it smooth.' };
     state.dialogueT = 999;
     state.weaponsOwned = [true, true, true, true, false];
@@ -228,10 +281,16 @@ export function applyShot(state, shotName, audio) {
     state.armour = 20;
     stageShotTraffic(state);
   } else if (shotName === 'airport') {
-    // 4-airport: on foot on the runway at morning, rifle out — the parked
-    // plane and the control tower ahead, hangars to the north, five stars
-    // and the helicopter overhead for the maximum response.
-    state.clockMin = 9 * 60 + 40;
+    // 4-airport (r6e): on foot on the runway at golden hour, rifle out —
+    // ONE realistic airliner on final approach over the runway, gear
+    // down, nose toward the camera (world.js builds it; the two parked
+    // planes are gone — user: only one plane, the flying one). Control
+    // tower ahead, hangars to the north, five stars, no helicopter.
+    // Camera sits at (212.5, 4.4, 140) looking +x, pitched down ~16 deg,
+    // vertical FOV 62 deg: at (288, 15, 126) the airliner sits high in
+    // the frame, left of centre, clear of the tower and the IN SIGHT
+    // pill, its full span visible against the orange sky.
+    state.clockMin = 17 * 60 + 55;
     state.player.x = 222;
     state.player.z = 140;
     state.player.angle = Math.PI / 2;
@@ -245,16 +304,8 @@ export function applyShot(state, shotName, audio) {
     state.heat = 100;
     state.heliDist = 24;
     state.heliAlt = 14;
-    // r6c (user order 23:04 WIB): no helicopter over the runway.
     state.shotNoHeli = true;
-    // r6c (user order 23:07 WIB): a plane on final approach over the
-    // runway, gear down, nose toward the camera — it reads as a landing,
-    // not a parked plane. Parked plane (262,140) stays. Camera sits at
-    // (212.5, 4.4, 140) looking +x, pitched down ~16 deg, vertical FOV
-    // 62 deg: at (268, 9, 128) the plane sits ~67% up the frame, left
-    // of centre, clear of the parked plane, the tower and the IN SIGHT
-    // pill (v1 at 275/11 was higher and tucked under the pill).
-    state.flyPlane = { x: 268, y: 9, z: 128, angle: Math.PI };
+    state.flyPlane = { x: 300, y: 19, z: 128, angle: Math.PI };
     state.dialogue = { speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'Five stars on the runway, Mara — the whole bay is watching!' };
     state.dialogueT = 999;
     state.weaponsOwned = [true, true, true, true, true];
@@ -264,8 +315,8 @@ export function applyShot(state, shotName, audio) {
     state.radio = 0;
     state.health = 100;
     state.armour = 60;
-    // Ground crew standing by the parked plane.
-    const crew = [[252, 134, 0.6], [258, 147, -0.8], [266, 138, 2.4], [250, 149, 1.8]];
+    // Ground crew standing by the runway edge, watching the landing.
+    const crew = [[238, 130, 0.6], [244, 150, -0.8], [232, 152, 2.4], [248, 128, 1.8]];
     for (let i = 0; i < crew.length && i < state.peds.length; i++) {
       const p = state.peds[i];
       p.x = crew[i][0];
