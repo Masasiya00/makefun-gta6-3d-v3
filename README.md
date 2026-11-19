@@ -1,56 +1,61 @@
 # SOLMAR BAY 3D
 
-[![make.fun](https://img.shields.io/badge/make.fun-gta6--01-ff5c8a)](https://make.fun)
-[![competition](https://img.shields.io/badge/competition-gta6--01-blue)](https://make.fun)
-[![repo](https://img.shields.io/badge/repo-Masasiya00%2Fmakefun--gta6--3d--v3-green)](https://github.com/Masasiya00/makefun-gta6-3d-v3)
+[![gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![rank](https://make.fun/badge/gta6-01/Masasiya00/makefun-gta6-3d-v3/rank.svg)](https://make.fun/bounty/gta6-01)
+[![reward](https://make.fun/badge/gta6-01/Masasiya00/makefun-gta6-3d-v3/reward.svg)](https://make.fun/bounty/gta6-01)
 
-An original open-world crime game in the browser, in the spirit of GTA 6 —
-built entirely from scratch with procedural low-poly art, procedural WebAudio
-sound and radio, and no network requests at all.
+An original open-world crime game in the browser, built for make.fun's
+**gta6-01 — Make GTA 6** competition. You are Mara, a driver new to the
+coastal city of Solmar Bay: steal cars, outrun the SBPD, run 12 story
+missions for Rosa and the crew, buy weapons and garage upgrades, climb the
+respect ranks from Rookie to King of the Bay — all at golden hour.
 
-You are **Mara**, a driver new to the sun-soaked coastal city of **Solmar Bay**.
-Rosa runs a garage and hands you the jobs: twelve story missions across twelve
-districts, from a first set of wheels on Palm Beach to a five-star finale at
-the marina. Steal cars, outrun the police (and their helicopter), rob a store,
-win a street race, ram a roadblock — and earn the respect to become
-King of the Bay.
+## The city
+
+Twelve districts across a 3,600 × 2,600 m coast: Palm Beach, Old Town,
+Dockside, Downtown, Marina, Coral Heights, Airfield, Bayview, Fairground,
+University, Stadium and Lighthouse Point. Traffic cars, sixty pedestrians,
+an ocean with animated waves, a rotating lighthouse beam and a ferris wheel.
+
+## Features
+
+- **On foot and by car** — third-person camera, 8 drivable models, carjacking, damage and wrecks
+- **Wanted 1–5 stars** — police pursuit cars, a helicopter with a searchlight from 3 stars, roadblocks, line-of-sight IN SIGHT indicator and a search-zone circle on the minimap
+- **Police response panel** — live unit callsigns, distances and states (PURSUIT / RAMMING / SPOTLIGHT / ROADBLOCK)
+- **12 story missions** — dialogue with portraits, timers, rewards up to $3,000
+- **Combat** — fists, pistol, SMG, shotgun and rifle with a 5-slot weapon wheel and ammo
+- **5 shops** — Rosa's Garage (repairs + engine/brakes/plating upgrades), Ironworks Arms, Tico Tacos, Neon Threads, Marina Motors (cars unlocked by respect)
+- **Respect ranks** — Rookie → Wheelman → Shot Caller → King of the Bay
+- **Radio** — three procedural WebAudio stations (chill, dance, talk)
+- **Save / load** — progress in localStorage; **pause, busted/wasted and victory screens**
+- **HUD + circular minimap** — mission tracker, stars, money, district, clock, vehicle panel, radio strip
 
 ## How to play
 
-Open `game/index.html` in desktop Chrome (or run `node serve.ts` and open
-http://localhost:8080). No build step, no install, no internet needed.
+Serve `game/` with any static server and open `index.html` in desktop Chrome
+(`node serve.ts`, then http://localhost:8080). No build step, no network requests.
 
-- **W A S D** — walk / drive · **Mouse** — look around · **Shift** — sprint
-- **Space** — jump (on foot) / handbrake (driving)
-- **E** — get in / out of a car, enter a shop, talk
-- **F** — punch · **Left click** — shoot (aim with the mouse)
-- **1–5** — switch weapon · **Tab** (hold) — weapon wheel
-- **R** — change radio station · **M** — mute · **P / Esc** — pause
-- **G** — toggle the mission tracker detail
+| Key | Action |
+| --- | --- |
+| WASD / arrows | Walk / drive |
+| Mouse | Look around |
+| E | Enter / exit car |
+| F | Open shop near a shop door |
+| M | Start the next mission |
+| 1–5 | Switch weapon |
+| Mouse click | Shoot / punch |
+| R | Next radio station |
+| P / Esc | Pause |
+| Z / L | Save / load |
+| X | Mute |
 
-Missions unlock in order. Finish one to save progress, get paid and earn
-respect. Free roam is always available between missions. Progress saves to
-local storage automatically.
-
-## What's inside
-
-- A 3,600 × 2,600 m coastal city: 12 districts, a beach and ocean, a harbour,
-  an airfield, a fairground ferris wheel, a university, a stadium and a
-  lighthouse with a rotating beam.
-- 8 drivable car models, ~35 traffic cars, ~60 pedestrians, day/night cycle
-  with golden-hour sunset as the default look.
-- A 1–5 star wanted system: police pursuit with line-of-sight, a search zone,
-  roadblocks from 3 stars, a police helicopter with a searchlight from 3 stars,
-  and a live police response panel in the HUD.
-- 12 story missions with dialogue and portraits, a respect system
-  (Rookie → Wheelman → Shot Caller → King of the Bay), 5 shops, garage
-  upgrades, 4 weapons, 3 procedural radio stations and full saving.
-- Deterministic screenshots: `?shot=chase|city|mission|night&seed=7`.
-  `?autoplay` runs a scripted self-test and reports pass/fail.
+Deterministic screenshots: `?shot=chase|city|mission|night&seed=7`.
+Self-test: `?autoplay=1` plays the game and reports pass/fail in `window.__autoplay`.
 
 ## Tech
 
-three.js (vendored minified build under `game/vendor/three/`), plain ES
-modules, fixed 1/60 s simulation steps separated from rendering, WebAudio for
-every sound. Everything is original and procedural — no assets from any
-commercial game.
+three.js r160 (vendored under `game/vendor/three/`), plain ES modules, fixed
+1/60 s simulation steps, procedural low-poly art and WebAudio sound — no
+external assets. `main.ts` hands the game in with the make.fun dossier library.
+
+Built for [make.fun/bounty/gta6-01](https://make.fun/bounty/gta6-01) — $1,666 prize pool.
