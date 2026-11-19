@@ -1,146 +1,125 @@
-// The living city: ~60 pedestrians walking the sidewalks (they wait at
-// crossings, chat in pairs, and panic-run from gunfire or fast cars) and ~35
-// traffic cars circulating on the road grid, pausing at intersections. Both
-// use pooled meshes and cheap steering so the frame rate stays up.
-import { createCar, stepCar, syncCarMesh } from './vehicles.js';
-import { CARS } from './config.js';
+// Traffic cars and pedestrians for Solmar Bay 3D: cars circulate the road
+// grid and stop at lights, pedestrians walk sidewalks and panic near danger.
+import * as THREE from 'three';
+import { CAR_MODELS } from './config.js';
+import { dist2d } from './random.js';
+import { makeCarMesh } from './vehicles.js';
 
-function makePedMesh(THREE, shirtColor) {
-  const g = new THREE.Group();
-  const shirt = new THREE.MeshLambertMaterial({ color: shirtColor });
-  const skin = new THREE.MeshLambertMaterial({ color: 0xd9a066 });
-  const pants = new THREE.MeshLambertMaterial({ color: 0x333a44 });
-  const add = (w, h, d, mat, x, y, z) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z); g.add(m); return m;
-  };
-  const legL = add(0.16, 0.6, 0.16, pants, -0.12, 0.32, 0);
-  const legR = add(0.16, 0.6, 0.16, pants, 0.12, 0.32, 0);
-  add(0.55, 0.65, 0.3, shirt, 0, 0.95, 0);
-  add(0.36, 0.36, 0.34, skin, 0, 1.48, 0);
-  const armL = add(0.13, 0.55, 0.13, shirt, -0.34, 0.95, 0);
-  const armR = add(0.13, 0.55, 0.13, shirt, 0.34, 0.95, 0);
-  return { group: g, legL, legR, armL, armR };
+export function spawnTraffic(state, scene) {
+  const rng = state.rng;
+  const meshes = new Map();
+  for (let i = 0; i < 30; i++) {
+    const model = rng.pick(CAR_MODELS);
+    const car = {
+      id: 'traf' + i, model, color: rng.pick(model.colors),
+      road: rng.pick([-300, -240, -180, -120, -60, 0, 60, 120, 180, 240, 300]),
+      along: rng.range(-240, 240), vertical: rng.chance(0.5),
+      dir: rng.chance(0.5) ? 1 : -1, speed: rng.range(9, 15),
+      x: 0, z: 0, angle: 0, condition: 100, lightWait: 0,
+    };
+    state.traffic.push(car);
+    const mesh = makeCarMesh(model, car.color);
+    scene.add(mesh); meshes.set(car.id, mesh);
+  }
+  return meshes;
 }
 
-export function createCrowd(THREE, rng, world, count) {
-  const peds = [];
-  const group = new THREE.Group();
-  const shirts = [0xe06a4f, 0x4fa8c8, 0xf2c94c, 0x7fb069, 0x8a6fc8, 0xe8e8e8, 0xd43d2a];
-  for (let i = 0; i < count; i += 1) {
-    const mesh = makePedMesh(THREE, shirts[i % shirts.length]);
-    group.add(mesh.group);
-    const x = rng.range(-1400, 1700);
-    const z = rng.range(-1200, 1200);
-    peds.push({
-      mesh, x, z, heading: rng.range(0, Math.PI * 2),
-      speed: rng.range(1.1, 1.9), target: null, wait: rng.range(0, 4),
-      panic: 0, phase: rng.range(0, 6), alive: true,
-    });
+export function updateTraffic(state, dt) {
+  for (const t of state.traffic) {
+    // Traffic light pause: cars near an intersection sometimes wait.
+    if (t.lightWait > 0) { t.lightWait -= dt; continue; }
+    if (Math.abs(t.along % 60) < 2 && state.rng.chance(0.002)) t.lightWait = 2 + state.rng.next() * 2;
+    t.along += t.dir * t.speed * dt;
+    if (t.along > 250) { t.along = -250; }
+    if (t.along < -250) { t.along = 250; }
+    if (t.vertical) { t.x = t.road; t.z = t.along; t.angle = t.dir > 0 ? 0 : Math.PI; }
+    else { t.z = t.road; t.x = t.along; t.angle = t.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
+    // Slow down if the player blocks the road ahead.
+    if (dist2d(t.x, t.z, state.player.x, state.player.z) < 10) t.speed = Math.max(4, t.speed - dt * 8);
+    else t.speed = Math.min(15, t.speed + dt * 2);
   }
-  function pickTarget(p) {
-    // Walk along a nearby road's sidewalk, or to a random nearby point.
-    const rx = world.roadPoints[Math.floor(rng.next() * world.roadPoints.length)];
-    return { x: rx.x + 8.5 + rng.range(-2, 2), z: rx.z + rng.range(-180, 180) };
-  }
-  return {
-    group, peds,
-    step(dt, danger) {
-      for (const p of peds) {
-        if (!p.alive) continue;
-        // Panic: gunfire or a fast car nearby.
-        if (danger && Math.hypot(danger.x - p.x, danger.z - p.z) < 26) p.panic = 3;
-        if (p.panic > 0) {
-          p.panic -= dt;
-          const dx = p.x - (danger ? danger.x : 0);
-          const dz = p.z - (danger ? danger.z : 0);
-          const len = Math.hypot(dx, dz) || 1;
-          p.x += (dx / len) * 5.5 * dt;
-          p.z += (dz / len) * 5.5 * dt;
-          p.heading = Math.atan2(dx, dz);
-        } else if (p.wait > 0) {
-          p.wait -= dt;
-          if (p.wait <= 0) p.target = pickTarget(p);
-        } else {
-          if (!p.target) p.target = pickTarget(p);
-          const dx = p.target.x - p.x; const dz = p.target.z - p.z;
-          const d = Math.hypot(dx, dz);
-          if (d < 3) { p.wait = rng.range(1, 6); p.target = null; }
-          else {
-            p.x += (dx / d) * p.speed * dt;
-            p.z += (dz / d) * p.speed * dt;
-            p.heading = Math.atan2(dx, dz);
-          }
-        }
-        p.phase += dt * (p.panic > 0 ? 14 : 7);
-        const cl = world.clampToWorld(p.x, p.z);
-        p.x = cl.x; p.z = cl.z;
-        p.mesh.group.position.set(p.x, 0, p.z);
-        p.mesh.group.rotation.y = p.heading;
-        const swing = Math.sin(p.phase) * 0.55;
-        p.mesh.legL.rotation.x = swing;
-        p.mesh.legR.rotation.x = -swing;
-        p.mesh.armL.rotation.x = -swing * 0.7;
-        p.mesh.armR.rotation.x = swing * 0.7;
-      }
-    },
-    runOverCheck(x, z, r) {
-      // Returns the pedestrians inside radius r (for the wanted system).
-      const hit = [];
-      for (const p of peds) {
-        if (p.alive && Math.hypot(p.x - x, p.z - z) < r) hit.push(p);
-      }
-      return hit;
-    },
-    knockDown(p) { p.alive = false; p.mesh.group.visible = false; },
-  };
 }
 
-export function createTraffic(THREE, rng, world, count) {
-  const cars = [];
-  const group = new THREE.Group();
-  for (let i = 0; i < count; i += 1) {
-    const def = CARS[Math.floor(rng.next() * CARS.length)];
-    const rp = world.roadPoints[Math.floor(rng.next() * world.roadPoints.length)];
-    const car = createCar(THREE, def.id, def.colors[Math.floor(rng.next() * def.colors.length)], rp.x, rp.z, rng.range(0, Math.PI * 2));
-    car.hasDriver = true;
-    car.cruise = rng.range(9, 14);
-    car.target = null;
-    car.wait = rng.range(0, 3);
-    group.add(car.mesh.group);
-    cars.push(car);
+export function syncTrafficMeshes(meshes, state) {
+  for (const t of state.traffic) {
+    const m = meshes.get(t.id);
+    if (!m) continue;
+    m.position.set(t.x, 0, t.z);
+    m.rotation.y = t.angle;
   }
-  function pickTarget(car) {
-    // Drive to a random intersection, preferring one along the current road.
-    return world.roadPoints[Math.floor(rng.next() * world.roadPoints.length)];
+}
+
+const PED_COLORS = [0xe63946, 0x2a9d8f, 0xf2c14e, 0x7b2fbe, 0x1d3557, 0xe26d5a, 0x6a994e, 0xef476f];
+
+export function spawnPedestrians(state, scene) {
+  const rng = state.rng;
+  const meshes = new Map();
+  for (let i = 0; i < 55; i++) {
+    const ped = {
+      id: 'ped' + i,
+      x: rng.range(-300, 330), z: rng.range(-240, 240),
+      angle: rng.next() * Math.PI * 2, speed: rng.range(1.2, 2.4),
+      panic: 0, color: rng.pick(PED_COLORS), phase: rng.next() * 6,
+      targetX: 0, targetZ: 0, wait: 0,
+    };
+    ped.targetX = ped.x; ped.targetZ = ped.z;
+    state.peds.push(ped);
+    const g = new THREE.Group();
+    const shirt = new THREE.MeshLambertMaterial({ color: ped.color });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), shirt);
+    body.position.y = 1.25; g.add(body);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.4), new THREE.MeshLambertMaterial({ color: 0xe8b98a }));
+    head.position.y = 1.95; g.add(head);
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.75, 0.3), new THREE.MeshLambertMaterial({ color: 0x2b2d42 }));
+    legL.position.set(-0.18, 0.4, 0); g.add(legL);
+    const legR = legL.clone(); legR.position.x = 0.18; g.add(legR);
+    g.userData = { legL, legR };
+    g.position.set(ped.x, 0, ped.z);
+    scene.add(g); meshes.set(ped.id, g);
   }
-  return {
-    group, cars,
-    step(dt, world, night, playerPos) {
-      for (const car of cars) {
-        if (car.wrecked) { syncCarMesh(car, night); continue; }
-        if (car.wait > 0) { car.wait -= dt; syncCarMesh(car, night); continue; }
-        if (!car.target) car.target = pickTarget(car);
-        const dx = car.target.x - car.x; const dz = car.target.z - car.z;
-        const d = Math.hypot(dx, dz);
-        if (d < 8) {
-          car.target = pickTarget(car);
-          if (rng.chance(0.25)) car.wait = rng.range(1, 3); // red light
-          continue;
-        }
-        const want = Math.atan2(dx, dz);
-        let diff = want - car.heading;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        const steer = Math.max(-1, Math.min(1, diff * 1.5));
-        // Slow down for the player ahead.
-        let throttle = 0.55;
-        if (playerPos && Math.hypot(playerPos.x - car.x, playerPos.z - car.z) < 14) throttle = -0.4;
-        stepCar(car, { throttle, steer, handbrake: false }, dt, world, cars);
-        // Keep traffic cars at cruise speed.
-        if (car.speed > car.cruise) car.speed = car.cruise;
-        syncCarMesh(car, night);
+  return meshes;
+}
+
+export function updatePedestrians(state, dt) {
+  for (const p of state.peds) {
+    const danger = dist2d(p.x, p.z, state.player.x, state.player.z);
+    const gunfire = state.flags.gunfireT > 0 && danger < 40;
+    if (danger < 8 || gunfire) p.panic = 3;
+    if (p.panic > 0) {
+      p.panic -= dt;
+      const away = Math.atan2(p.x - state.player.x, p.z - state.player.z);
+      p.x += Math.sin(away) * 5.5 * dt;
+      p.z += Math.cos(away) * 5.5 * dt;
+      p.angle = away;
+      p.phase += dt * 12;
+    } else {
+      if (p.wait > 0) { p.wait -= dt; continue; }
+      const d = dist2d(p.x, p.z, p.targetX, p.targetZ);
+      if (d < 2) {
+        p.targetX = Math.max(-330, Math.min(330, p.x + (state.rng.next() - 0.5) * 80));
+        p.targetZ = Math.max(-240, Math.min(240, p.z + (state.rng.next() - 0.5) * 80));
+        if (state.rng.chance(0.25)) p.wait = 2 + state.rng.next() * 4;
+        continue;
       }
-    },
-  };
+      const a = Math.atan2(p.targetX - p.x, p.targetZ - p.z);
+      p.angle += (a - p.angle) * Math.min(1, dt * 4);
+      p.x += Math.sin(p.angle) * p.speed * dt;
+      p.z += Math.cos(p.angle) * p.speed * dt;
+      p.phase += dt * 7;
+    }
+    p.x = Math.max(-340, Math.min(340, p.x));
+    p.z = Math.max(-245, Math.min(245, p.z));
+  }
+}
+
+export function syncPedMeshes(meshes, state) {
+  for (const p of state.peds) {
+    const m = meshes.get(p.id);
+    if (!m) continue;
+    m.position.set(p.x, 0, p.z);
+    m.rotation.y = p.angle;
+    const swing = Math.sin(p.phase) * 0.5;
+    m.userData.legL.rotation.x = swing;
+    m.userData.legR.rotation.x = -swing;
+  }
 }
