@@ -71,7 +71,7 @@ export function buyItem(state, shop, itemId, audio) {
   }
   if (shop.kind === 'arms') {
     const wi = parseInt(itemId.slice(1), 10);
-    if (!state.weaponsOwned[wi]) { state.weaponsOwned[wi] = true; state.ammo[wi] = WEAPONS[wi].ammo; }
+    if (!state.weaponsOwned[wi]) { state.weaponsOwned[wi] = true; state.ammo[wi] = WEAPONS[wi].ammo; state.magAmmo[wi] = WEAPONS[wi].mag; }
     else state.ammo[wi] += WEAPONS[wi].ammo;
     state.weaponIndex = wi;
   }
