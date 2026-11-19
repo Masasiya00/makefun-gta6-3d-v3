@@ -553,6 +553,49 @@ export function createWorld(state) {
   tailplane.position.set(-7, 1.2, 0);
   plane.add(tailplane);
 
+  // Flying plane for the airport shot (r6c): an airliner on final approach
+  // over the runway, gear down, nose toward the camera. Built once here,
+  // hidden by default; syncWorld shows it only while a shot stages it
+  // (state.flyPlane), so normal gameplay never sees it. Same construction
+  // as the parked plane, so it reads as the same kind of aircraft.
+  const flyPlane = new THREE.Group();
+  const flyTilt = new THREE.Group();
+  flyTilt.rotation.z = 0.08; // slight nose-up on final approach
+  flyPlane.add(flyTilt);
+  const flyFus = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 16, 8), mat(0xf2f2f2));
+  flyFus.rotation.z = Math.PI / 2;
+  flyTilt.add(flyFus);
+  const flyWing = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 18), mat(0xd8d8d8));
+  flyTilt.add(flyWing);
+  const flyFin = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 2.2), mat(0xe63946));
+  flyFin.position.set(-7.5, 3.2, 0);
+  flyTilt.add(flyFin);
+  const flyTailplane = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.3, 8), mat(0xd8d8d8));
+  flyTailplane.position.set(-7, 1.2, 0);
+  flyTilt.add(flyTailplane);
+  // Landing gear down: nose gear + two main gears under the wings.
+  const gearMat = mat(0x22242a);
+  function flyGear(x, z) {
+    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.6, 6), gearMat);
+    strut.position.set(x, -2.3, z);
+    flyTilt.add(strut);
+    const wheel = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.5), gearMat);
+    wheel.position.set(x, -3.2, z);
+    flyTilt.add(wheel);
+  }
+  flyGear(5, 0);
+  flyGear(-1, 4);
+  flyGear(-1, -4);
+  // Wingtip nav lights: red port, green starboard.
+  const flyNavL = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
+  flyNavL.position.set(0, 0, 9);
+  flyTilt.add(flyNavL);
+  const flyNavR = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0x2aff66 }));
+  flyNavR.position.set(0, 0, -9);
+  flyTilt.add(flyNavR);
+  flyPlane.visible = false;
+  group.add(flyPlane);
+
   const containerColors = [0xe63946, 0x2a9d8f, 0xe9c46a, 0x264653, 0xf4a261];
   for (let i = 0; i < 18; i++) {
     box(8, 3, 3, rng.pick(containerColors), -250 + rng.range(-30, 30), 1.5, -210 + rng.range(-25, 25));
@@ -631,7 +674,7 @@ export function createWorld(state) {
   const shopGroup = new THREE.Group();
   scene.add(shopGroup);
 
-  return { scene, bg, sun, amb, hemi, ocean, oceanGeo, wheel, beam, lampHeads, windows: facades, clouds, group, shopGroup, facades };
+  return { scene, bg, sun, amb, hemi, ocean, oceanGeo, wheel, beam, lampHeads, windows: facades, clouds, group, shopGroup, facades, flyPlane };
 }
 
 export function syncWorld(world, state, dt) {
@@ -686,6 +729,19 @@ export function syncWorld(world, state, dt) {
   for (const m of world.lampHeads) m.color.setHex(night ? 0xffe9a0 : 0x8a8f98);
   const glow = night ? 1 : golden ? 0.45 : 0.12;
   for (const m of world.windows) m.emissiveIntensity = glow;
+
+  // Airport shot staging (r6c): a plane on final approach, gear down.
+  // Only visible while a shot stages it (state.flyPlane); hidden otherwise.
+  if (world.flyPlane) {
+    const fp = state.flyPlane;
+    if (fp) {
+      world.flyPlane.visible = true;
+      world.flyPlane.position.set(fp.x, fp.y, fp.z);
+      world.flyPlane.rotation.y = fp.angle ?? 0;
+    } else {
+      world.flyPlane.visible = false;
+    }
+  }
 
   return dayFrac;
 }
