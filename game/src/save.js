@@ -1,42 +1,45 @@
-// Saving and loading: money, completed missions, owned weapons and cars,
-// respect, garage upgrades and the player's position, in local storage.
-import { SAVE_KEY } from './config.js';
+// Saving and loading for Solmar Bay 3D: progress lives in localStorage.
+const KEY = 'solmar-bay-3d-save-v1';
 
 export function saveGame(state) {
   try {
     const data = {
-      money: state.money,
-      respect: state.respect,
-      health: state.health,
-      armour: state.armour,
-      completed: state.missions.saveData().completed,
-      unlocked: state.missions.saveData().unlocked,
-      weaponsOwned: state.weaponsOwned,
-      ammo: state.ammo,
-      ownedCars: state.ownedCars,
-      carUpgrades: state.car ? state.car.upgrades : {},
-      shirtColor: state.player.shirtColor,
-      x: state.player.x, z: state.player.z,
-      clock: state.clock,
-      station: state.audio.stationIndex(),
+      money: state.money, health: state.health, armour: state.armour,
+      respect: state.respect, missionIndex: state.missionIndex,
+      missionDone: state.missionDone, weaponsOwned: state.weaponsOwned,
+      ammo: state.ammo, ownedCars: state.ownedCars, upgrades: state.upgrades,
+      outfit: state.outfit, radio: state.radio, clockMin: state.clockMin, day: state.day,
+      x: state.player.x, z: state.player.z, wanted: state.wanted,
     };
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    localStorage.setItem(KEY, JSON.stringify(data));
+    state.message = 'Progress saved'; state.messageT = 2;
     return true;
-  } catch {
-    return false;
-  }
+  } catch (e) { return false; }
 }
 
-export function loadGame() {
+export function loadGame(state) {
   try {
-    const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    state.money = d.money; state.health = d.health; state.armour = d.armour;
+    state.respect = d.respect; state.missionIndex = d.missionIndex;
+    state.missionDone = d.missionDone || [];
+    state.weaponsOwned = d.weaponsOwned; state.ammo = d.ammo;
+    state.ownedCars = d.ownedCars || []; state.upgrades = d.upgrades || state.upgrades;
+    state.outfit = d.outfit || 0; state.radio = d.radio || 0;
+    state.clockMin = d.clockMin; state.day = d.day;
+    state.player.x = d.x; state.player.z = d.z; state.wanted = d.wanted || 0;
+    state.heat = state.wanted * 20;
+    state.message = 'Save loaded'; state.messageT = 2;
+    return true;
+  } catch (e) { return false; }
+}
+
+export function hasSave() {
+  try { return !!localStorage.getItem(KEY); } catch (e) { return false; }
 }
 
 export function clearSave() {
-  try { window.localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+  try { localStorage.removeItem(KEY); } catch (e) {}
 }
