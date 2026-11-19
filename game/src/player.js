@@ -1,85 +1,100 @@
-// Mara, the player character on foot: a low-poly person with a walk/run
-// animation (swinging arms and legs), jump, punch, and a simple aim pose.
-// The mesh is a group of boxes; the simulation moves the state, the renderer
-// only reads it.
-export function createPlayer(THREE) {
+// The player character on foot for Solmar Bay 3D: walk, run, jump, punch,
+// enter and exit cars, health and armour.
+import * as THREE from 'three';
+import { clamp, dist2d } from './random.js';
+import { addWanted } from './config.js';
+import { nearestCar, enterCar } from './vehicles.js';
+
+const OUTFITS = [0x2a9d8f, 0xe63946, 0x1d3557, 0xf2c14e, 0x7b2fbe];
+
+export function makePlayerMesh(state) {
   const g = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0xd9a066 });
-  const shirt = new THREE.MeshLambertMaterial({ color: 0x4fa8c8 });
-  const pants = new THREE.MeshLambertMaterial({ color: 0x2a3040 });
-  const hair = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-  const parts = {};
-  const add = (name, w, h, d, mat, x, y, z) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z); m.castShadow = true;
-    g.add(m); parts[name] = m; return m;
-  };
-  add('torso', 0.62, 0.75, 0.34, shirt, 0, 1.15, 0);
-  add('head', 0.42, 0.42, 0.4, skin, 0, 1.78, 0);
-  add('hair', 0.44, 0.16, 0.42, hair, 0, 2.0, 0);
-  add('armL', 0.16, 0.68, 0.16, shirt, -0.4, 1.15, 0);
-  add('armR', 0.16, 0.68, 0.16, shirt, 0.4, 1.15, 0);
-  add('legL', 0.2, 0.72, 0.2, pants, -0.16, 0.42, 0);
-  add('legR', 0.2, 0.72, 0.2, pants, 0.16, 0.42, 0);
-  // A simple gun held in the right hand when armed.
-  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.42), new THREE.MeshLambertMaterial({ color: 0x111111 }));
-  gun.position.set(0.4, 1.05, 0.25); gun.visible = false;
-  g.add(gun); parts.gun = gun;
-  return {
-    group: g, parts,
-    x: 0, z: 0, y: 0, heading: 0, vy: 0, grounded: true,
-    walkPhase: 0, moving: false, speed: 0, punching: 0, armed: false,
-    shirtColor: 0x4fa8c8,
-    setShirt(colorHex) {
-      this.shirtColor = colorHex;
-      parts.torso.material = new THREE.MeshLambertMaterial({ color: colorHex });
-      parts.armL.material = parts.torso.material;
-      parts.armR.material = parts.torso.material;
-    },
-  };
+  const shirt = new THREE.MeshLambertMaterial({ color: OUTFITS[state.outfit % OUTFITS.length] });
+  const skin = new THREE.MeshLambertMaterial({ color: 0xe8b98a });
+  const pants = new THREE.MeshLambertMaterial({ color: 0x2b2d42 });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.0, 0.45), shirt);
+  torso.position.y = 1.35; torso.castShadow = true; g.add(torso);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.5), skin);
+  head.position.y = 2.15; head.castShadow = true; g.add(head);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.18, 0.55), new THREE.MeshLambertMaterial({ color: 0xffc300 }));
+  cap.position.y = 2.48; g.add(cap);
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.85, 0.36), pants);
+  legL.position.set(-0.22, 0.45, 0); g.add(legL);
+  const legR = legL.clone(); legR.position.x = 0.22; g.add(legR);
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.85, 0.3), shirt);
+  armL.position.set(-0.58, 1.35, 0); g.add(armL);
+  const armR = armL.clone(); armR.position.x = 0.58; g.add(armR);
+  g.userData = { legL, legR, armL, armR, torso, shirt };
+  return g;
 }
 
-// One fixed-step update for on-foot movement. `input` is {x:-1..1, y:-1..1,
-// jump, sprint, lookDX}. Camera yaw steers the movement direction.
-export function stepPlayer(p, input, camYaw, dt, world) {
-  const runSpeed = input.sprint ? 9 : 5;
-  const mx = input.x; const mz = input.y;
+export function updatePlayerOnFoot(state, input, dt, audio) {
+  const p = state.player;
+  const sprint = input.keys.ShiftLeft || input.keys.ShiftRight;
+  const speed = sprint ? 9 : 5;
+  let mx = 0, mz = 0;
+  if (input.keys.KeyW || input.keys.ArrowUp) mz -= 1;
+  if (input.keys.KeyS || input.keys.ArrowDown) mz += 1;
+  if (input.keys.KeyA || input.keys.ArrowLeft) mx -= 1;
+  if (input.keys.KeyD || input.keys.ArrowRight) mx += 1;
   const moving = mx !== 0 || mz !== 0;
-  p.moving = moving;
   if (moving) {
-    // Move relative to the camera yaw.
-    const sin = Math.sin(camYaw); const cos = Math.cos(camYaw);
-    const dx = (mx * cos - mz * sin);
-    const dz = (mx * sin - mz * cos);
-    const len = Math.hypot(dx, dz) || 1;
-    const nx = p.x + (dx / len) * runSpeed * dt;
-    const nz = p.z + (dz / len) * runSpeed * dt;
-    const col = world.collideCircle(nx, nz, 0.6);
-    const cl = world.clampToWorld(col.x, col.z);
-    p.x = cl.x; p.z = cl.z;
-    p.heading = Math.atan2(dx, dz);
-    p.speed = runSpeed;
-    p.walkPhase += dt * runSpeed * 1.6;
+    const len = Math.hypot(mx, mz); mx /= len; mz /= len;
+    // Movement is camera-relative: forward is the camera yaw.
+    const yaw = state.cameraYaw || 0;
+    const wx = mx * Math.cos(yaw) - mz * Math.sin(yaw);
+    const wz = mx * Math.sin(yaw) + mz * Math.cos(yaw);
+    p.x += wx * speed * dt;
+    p.z += wz * speed * dt;
+    p.angle = Math.atan2(wx, wz);
+    p.walkPhase += dt * (sprint ? 13 : 9);
+    p.speed = speed;
   } else {
     p.speed = 0;
   }
-  if (input.jump && p.grounded) { p.vy = 7; p.grounded = false; }
-  if (!p.grounded) {
-    p.vy -= 22 * dt;
-    p.y += p.vy * dt;
-    if (p.y <= 0) { p.y = 0; p.vy = 0; p.grounded = true; }
+  p.x = clamp(p.x, -355, 355);
+  p.z = clamp(p.z, -255, 255);
+  // Enter a nearby car.
+  if (input.pressed.KeyE) {
+    const car = nearestCar(state, p.x, p.z, 5);
+    if (car) {
+      enterCar(state, car);
+      if (car.parked) addWanted(state, 1);
+      state.message = car.model.name + ' — yours now'; state.messageT = 2;
+    }
   }
-  if (p.punching > 0) p.punching -= dt;
+  // Pickups.
+  for (const pk of state.pickups) {
+    if (!pk.taken && dist2d(p.x, p.z, pk.x, pk.z) < 2.2) {
+      pk.taken = true;
+      if (pk.kind === 'cash') { state.money += pk.amount; state.message = '+$' + pk.amount; }
+      if (pk.kind === 'health') state.health = clamp(state.health + 40, 0, 100);
+      if (pk.kind === 'armour') state.armour = clamp(state.armour + 50, 0, 100);
+      state.messageT = 2;
+    }
+  }
 }
 
-export function syncPlayerMesh(p) {
-  p.group.position.set(p.x, p.y, p.z);
-  p.group.rotation.y = p.heading;
-  const swing = p.moving ? Math.sin(p.walkPhase) * 0.7 : 0;
-  p.parts.legL.rotation.x = swing;
-  p.parts.legR.rotation.x = -swing;
-  p.parts.armL.rotation.x = -swing * 0.8;
-  p.parts.armR.rotation.x = p.punching > 0 ? -1.6 : swing * 0.8;
-  p.parts.gun.visible = p.armed;
-  if (p.armed) p.parts.armR.rotation.x = -1.2;
+export function syncPlayerMesh(mesh, state) {
+  const p = state.player;
+  mesh.visible = p.onFoot;
+  if (!p.onFoot) return;
+  mesh.position.set(p.x, 0, p.z);
+  mesh.rotation.y = p.angle;
+  const swing = p.speed > 0 ? Math.sin(p.walkPhase) * 0.55 : 0;
+  mesh.userData.legL.rotation.x = swing;
+  mesh.userData.legR.rotation.x = -swing;
+  mesh.userData.armL.rotation.x = -swing * 0.8;
+  mesh.userData.armR.rotation.x = swing * 0.8;
+  mesh.userData.shirt.color.setHex(OUTFITS[state.outfit % OUTFITS.length]);
+}
+
+export function hurtPlayer(state, amount) {
+  let left = amount;
+  if (state.armour > 0) {
+    const absorbed = Math.min(state.armour, left);
+    state.armour -= absorbed; left -= absorbed;
+  }
+  state.health = Math.max(0, state.health - left);
+  if (state.health <= 0) { state.wasted = true; state.gameOver = true; }
 }
