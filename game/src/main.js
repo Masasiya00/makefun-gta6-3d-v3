@@ -1,4 +1,4 @@
-// Main loop for Solmar Bay 3D: fixed 1/60 s simulation steps, chase camera,
+// Solmar Bay 3D — main loop: fixed 1/60 s simulation steps, chase camera,
 // wiring for every system, deterministic screenshot scenes and the autoplay
 // self-test (?autoplay=1) that plays the game and reports pass or fail.
 import * as THREE from 'three';
@@ -111,6 +111,39 @@ let camDist = 10;
 
 function updateCamera(dt) {
   const p = state.player;
+  // Mission shot: a wide side establishing shot that tracks the player,
+  // instead of the rear chase view. The camera sits out on the heli side
+  // of the road (the same road-frame right vector police.js uses for the
+  // heli), behind the player and well above the street, and looks at a
+  // point ahead of the player toward the roadblock. The road then runs
+  // diagonally across the frame with the red car driving toward the
+  // roadblock wall, which reads as a completely different composition
+  // from the cover chase shot. This branch sets the camera directly and
+  // returns before the normal cameraYaw easing, which would otherwise
+  // drag the camera back behind the car every frame.
+  //
+  // Framing note: the shot is taken after a fixed wall-clock wait, and
+  // in the slow headless renderer the simulation may not have advanced
+  // at all by then — the player is still at its start spot and the
+  // roadblock still sits at its 55 m spawn point (it only gets re-parked
+  // to 20 m ahead once simulation steps run). The camera is pulled far
+  // enough back and the lookAt far enough ahead that the 55 m roadblock
+  // clears the left HUD panel, while the 20 m re-parked position stays
+  // in frame too, so the shot reads in both timings.
+  if (state.cameraShot === 'mission') {
+    const a = p.angle;
+    const fwdX = Math.sin(a);
+    const fwdZ = Math.cos(a);
+    const rightX = Math.cos(a);
+    const rightZ = -Math.sin(a);
+    camera.position.set(
+      p.x + fwdX * -14 + rightX * 28,
+      11,
+      p.z + fwdZ * -14 + rightZ * 28,
+    );
+    camera.lookAt(p.x + fwdX * 14, 2, p.z + fwdZ * 14);
+    return;
+  }
   // Mouse look steers the camera yaw; while driving it eases back behind the car.
   state.cameraYaw -= input.lookDX * 0.0032;
   if (p.inCar) {
@@ -143,7 +176,7 @@ function step(dt) {
   }
   if (wasPressed(input, 'Escape')) {
     if (state.shopOpen) state.shopOpen = false;
-    else if (state.started && !state.gameOver) state.paused = !state.paused;
+    else if (state.started && !state.gameOver) { state.paused = !state.paused; }
   }
   if (wasPressed(input, 'KeyR') && state.started) { state.radio = (state.radio + 1) % 3; playClick(audio); }
   if (wasPressed(input, 'KeyX')) { setMuted(audio, !audio.muted); state.muted = audio.muted; }
