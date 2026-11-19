@@ -407,7 +407,10 @@ export function updatePolice(state, dt, meshes, scene) {
   const tailRotor = meshes.get('heliTailRotor');
   const cone = meshes.get('heliCone');
   const spotTarget = meshes.get('heliSpotTarget');
-  if (wanted >= 3 && heli) {
+  // r6c: staged shots can force the heli on (countryside, 1 star) or
+  // suppress it (beach/airport, 5 stars) via state.shotForceHeli /
+  // state.shotNoHeli, set in applyShot and reset every shot.
+  if ((wanted >= 3 || state.shotForceHeli) && heli && !state.shotNoHeli) {
     // Five stars: the helicopter closes in — nearer, so the spotlight
     // stays glued to the player and escape gets much harder. Altitude is
     // untouched: in staged shots a lower heli would clip the chase cars.
@@ -503,7 +506,7 @@ export function syncPoliceMeshes(meshes, state) {
 export function policePanelRows(state) {
   const rows = [];
   for (const c of state.police.slice(0, 5)) rows.push({ callsign: c.callsign, dist: c.dist ?? 0, state: c.state });
-  if (state.heli && state.wanted >= 3) {
+  if (state.heli && (state.wanted >= 3 || state.shotForceHeli)) {
     rows.push({ callsign: 'AIR-1', dist: Math.round(dist2d(state.heli.x, state.heli.z, state.player.x, state.player.z)), state: 'SPOTLIGHT' });
   }
   if (state.roadblocks.filter((r) => !r.broken).length > 0) rows.push({ callsign: 'TAC-45', dist: 70, state: 'ROADBLOCK' });
