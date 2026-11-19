@@ -1,4 +1,4 @@
-// Main loop for Solmar Bay 3D: fixed 1/60s simulation steps, chase camera,
+// Main loop for Solmar Bay 3D: fixed 1/60 s simulation steps, chase camera,
 // wiring for every system, deterministic screenshot scenes and the autoplay
 // self-test (?autoplay=1) that plays the game and reports pass or fail.
 import * as THREE from 'three';
@@ -9,13 +9,13 @@ import { createWorld, syncWorld } from './world.js';
 import { makePlayerMesh, updatePlayerOnFoot, syncPlayerMesh, hurtPlayer } from './player.js';
 import { spawnParkedCars, updateDriving, syncCarMeshes, exitCar, nearestCar, enterCar } from './vehicles.js';
 import { spawnTraffic, updateTraffic, syncTrafficMeshes, spawnPedestrians, updatePedestrians, syncPedMeshes } from './traffic.js';
-import { createPolice, updatePolice, syncPoliceMeshes } from './police.js';
+import { createPolice, updatePolice, syncPoliceMeshes, playerRoad, roadPoint, alongOf, roadblockSlots, COP_SHOT_SLOTS } from './police.js';
 import { createCombat, updateCombat, switchWeapon, spawnEnemy } from './combat.js';
 import { startMission, updateMissions, retryMission } from './missions.js';
 import { updateShops, buyItem } from './shops.js';
 import { saveGame, loadGame, hasSave } from './save.js';
 import { updateHud, drawMinimap } from './hud.js';
-import { applyShot } from './shots.js';
+import { applyShot, placeShotTrafficCar } from './shots.js';
 
 const params = new URLSearchParams(location.search);
 const seed = parseInt(params.get('seed') || '7', 10);
@@ -59,7 +59,8 @@ for (const pk of state.pickups) {
     new THREE.MeshBasicMaterial({ color: pk.kind === 'cash' ? 0x2ecc71 : pk.kind === 'health' ? 0xff5d5d : 0x4d8dff }),
   );
   m.position.set(pk.x, 1, pk.z);
-  pickupGroup.add(m); pickupMeshes.push(m);
+  pickupGroup.add(m);
+  pickupMeshes.push(m);
 }
 
 // HUD element handles.
@@ -91,9 +92,16 @@ els.shopMenu.addEventListener('click', (e) => {
 
 function resetAfterGameOver() {
   state.money = Math.floor(state.money * 0.9);
-  state.health = 100; state.armour = 0; state.wanted = 0; state.heat = 0;
-  state.busted = false; state.wasted = false; state.gameOver = false; state.victory = false;
-  state.player.x = -150; state.player.z = 100;
+  state.health = 100;
+  state.armour = 0;
+  state.wanted = 0;
+  state.heat = 0;
+  state.busted = false;
+  state.wasted = false;
+  state.gameOver = false;
+  state.victory = false;
+  state.player.x = -150;
+  state.player.z = 100;
   state.police = [];
   state.enemies = [];
 }
@@ -168,24 +176,34 @@ function step(dt) {
   updateMissions(state, dt, audio);
   updateShops(state, input, audio);
   updateAudio(audio, state, dt);
-  // Shot-mode staging: keep the helicopter ahead for the cover, and the
-  // roadblock close ahead for the mission shot.
-  if (state.cameraShot === 'chase' && state.wanted >= 3) {
-    state.heliAngle = 1.1 + Math.sin(state.time * 0.15) * 0.2;
-  }
+  // Shot-mode staging: the whole chase scene is re-parked every step so
+  // the composition holds however much simulation time passes before the
+  // screenshot is taken. Everything is snapped to the road the player is
+  // driving on, facing along it. (The heli is staged inside updatePolice,
+  // which freezes its orbit and parks it ahead-above the player in shots.)
   if (state.cameraShot === 'mission' && state.roadblocks.length > 0) {
-    const a = state.player.angle;
+    const slots = roadblockSlots(state, 20);
     state.roadblocks.forEach((rb, i) => {
-      if (!rb.broken) {
-        rb.x = state.player.x + Math.sin(a) * 20 + Math.cos(a) * (i - 1) * 7;
-        rb.z = state.player.z + Math.cos(a) * 20 - Math.sin(a) * (i - 1) * 7;
-        rb.angle = a + Math.PI / 2;
+      if (!rb.broken && slots[i]) {
+        rb.x = slots[i].x;
+        rb.z = slots[i].z;
+        rb.angle = slots[i].angle;
       }
     });
   }
-  // Mission 11 roadblock staging in normal play: keep one ahead while wanted.
-  if (state.missionActive && state.missionIndex === 10 && state.roadblocks.length === 0 && state.wanted >= 3) {
-    // updatePolice already stages one 55m ahead; leave it.
+  if (state.cameraShot === 'chase' || state.cameraShot === 'mission') {
+    const road = playerRoad(state);
+    const pAlong = alongOf(road, state.player.x, state.player.z);
+    for (const cop of state.police) {
+      const slot = COP_SHOT_SLOTS[cop.slot % COP_SHOT_SLOTS.length];
+      const pos = roadPoint(road, pAlong + slot.along * road.dir, slot.lane);
+      cop.x = pos.x;
+      cop.z = pos.z;
+      cop.angle = road.angle;
+    }
+    for (const car of state.traffic) {
+      if (car.shotRole) placeShotTrafficCar(state, car, car.shotRole);
+    }
   }
 }
 
@@ -204,7 +222,8 @@ function render() {
         new THREE.MeshBasicMaterial({ color: pk.kind === 'cash' ? 0x2ecc71 : pk.kind === 'health' ? 0xff5d5d : 0x4d8dff }),
       );
       m.position.set(pk.x, 1, pk.z);
-      pickupGroup.add(m); pickupMeshes.push(m);
+      pickupGroup.add(m);
+      pickupMeshes.push(m);
     }
     pickupMeshes[i].visible = !pk.taken;
     pickupMeshes[i].rotation.y += 0.05;
@@ -231,7 +250,8 @@ function driveToward(tx, tz, seconds, throttle) {
     input.keys.KeyA = diff > 0.25;
     input.keys.KeyD = diff < -0.25;
     step(1 / 60);
-    input.keys.KeyA = false; input.keys.KeyD = false;
+    input.keys.KeyA = false;
+    input.keys.KeyD = false;
     if (throttle === false) break;
   }
   input.keys.KeyW = false;
@@ -246,10 +266,14 @@ function runAutoplay() {
   window.__autoplay = { running: true, results: autoLog };
   try {
     // 1. Walk on foot.
-    input.keys.KeyW = true; waitSim(2); input.keys.KeyW = false;
+    input.keys.KeyW = true;
+    waitSim(2);
+    input.keys.KeyW = false;
     autoCheck('walk', Math.abs(state.player.x - -150) > 1 || Math.abs(state.player.z - 100) > 1);
     // 2. Enter Rosa's coupe.
-    state.player.x = -160; state.player.z = 104; state.player.angle = 0;
+    state.player.x = -160;
+    state.player.z = 104;
+    state.player.angle = 0;
     input.pressed.KeyE = true;
     step(1 / 60);
     input.pressed = {};
@@ -274,17 +298,29 @@ function runAutoplay() {
     autoCheck('mission3', state.missionDone.includes(2));
     // 7. Mission 6 heist + escape.
     startMission(state, 5, audio);
-    state.player.inCar = false; state.player.onFoot = true; state.player.carId = null;
-    state.player.x = -262; state.player.z = -138;
+    state.player.inCar = false;
+    state.player.onFoot = true;
+    state.player.carId = null;
+    state.player.x = -262;
+    state.player.z = -138;
     waitSim(1);
-    state.inSight = false; state.wanted = 0; state.heat = 0;
+    state.inSight = false;
+    state.wanted = 0;
+    state.heat = 0;
     waitSim(2);
     autoCheck('mission6', state.missionDone.includes(5));
     // 8. Mission 11 convoy ram.
     startMission(state, 10, audio);
-    state.health = 100; state.gameOver = false; state.busted = false; state.wasted = false;
+    state.health = 100;
+    state.gameOver = false;
+    state.busted = false;
+    state.wasted = false;
     { const r = state.cars.find((c) => c.id === 'rosa'); if (r) { r.x = -180; r.z = -60; r.angle = Math.PI / 2; r.condition = 100; r.speed = 0; } }
-    state.player.x = -180; state.player.z = -60; state.player.carId = 'rosa'; state.player.inCar = true; state.player.onFoot = false;
+    state.player.x = -180;
+    state.player.z = -60;
+    state.player.carId = 'rosa';
+    state.player.inCar = true;
+    state.player.onFoot = false;
     state.player.angle = Math.PI / 2;
     driveToward(-180, 20, 6);
     autoCheck('mission11-roadblock', state.flags.roadblockBroken === true || state.missionStage === 1);
@@ -298,14 +334,16 @@ function runAutoplay() {
     if (!state.missionDone.includes(11)) { const r = state.cars.find((c) => c.id === 'rosa'); if (r) { r.condition = 100; r.x = state.player.x; r.z = state.player.z; } driveToward(-262, -138, 10); }
     autoCheck('mission12', state.missionDone.includes(11));
     // 10. Shop: garage upgrade while driving.
-    state.player.x = -168; state.player.z = 118;
+    state.player.x = -168;
+    state.player.z = 118;
     state.money = 5000;
     updateShops(state, input, audio);
     autoCheck('shopNear', !!state.shopNear);
     const bought = state.shopNear ? buyItem(state, state.shopNear, 'upg_engine', audio) : false;
     autoCheck('garageUpgrade', bought && state.upgrades.engine === true);
     // 11. Weapon buy.
-    state.player.x = 42; state.player.z = 18;
+    state.player.x = 42;
+    state.player.z = 18;
     updateShops(state, input, audio);
     const boughtW = state.shopNear ? buyItem(state, state.shopNear, 'w2', audio) : false;
     autoCheck('weaponBuy', boughtW && state.weaponsOwned[2] === true);
@@ -319,12 +357,20 @@ function runAutoplay() {
     const before = state.radio;
     state.radio = (state.radio + 1) % 3;
     autoCheck('radio', state.radio !== before);
-    state.paused = true; const t0 = state.time; waitSim(0); state.paused = false;
+    state.paused = true;
+    const t0 = state.time;
+    waitSim(0);
+    state.paused = false;
     autoCheck('pauseResume', state.paused === false);
     // 14. Combat: spawn an enemy ahead, fire the pistol, check damage.
-    state.weaponsOwned[1] = true; state.ammo[1] = 30; state.weaponIndex = 1;
-    state.player.onFoot = true; state.player.inCar = false; state.player.carId = null;
-    state.cameraYaw = 0; state.player.angle = 0;
+    state.weaponsOwned[1] = true;
+    state.ammo[1] = 30;
+    state.weaponIndex = 1;
+    state.player.onFoot = true;
+    state.player.inCar = false;
+    state.player.carId = null;
+    state.cameraYaw = 0;
+    state.player.angle = 0;
     const foe = spawnEnemy(state, world.scene, state.player.x, state.player.z + 12, 'goon');
     const hpBefore = foe.health;
     input.mouseDown = true;
@@ -342,12 +388,14 @@ function runAutoplay() {
 // ---- Frame loop ----------------------------------------------------------
 let last = performance.now();
 let acc = 0;
-let frames = 0, fpsT = 0;
+let frames = 0;
+let fpsT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  frames++; fpsT += dt;
+  frames++;
+  fpsT += dt;
   if (fpsT >= 1) { state.fps = Math.round(frames / fpsT); state.frameMs = Math.round((fpsT / frames) * 1000); frames = 0; fpsT = 0; }
   if (state.autoplay && !window.__autoplayStarted) {
     window.__autoplayStarted = true;
@@ -376,7 +424,16 @@ window.addEventListener('resize', () => {
 
 window.__game = { state, input, startMission, saveGame, loadGame, step };
 
-// Apply the deterministic shot staging after the world exists.
-if (shotName) applyShot(state, shotName, audio);
+// Apply the deterministic shot staging after the world exists. Prime the
+// police once with dt=0 so the pursuit cars, the roadblock and the heli
+// already exist before the first rendered frame: in headless SwiftShader
+// the first frames are slow, and a screenshot taken before the first
+// simulation step ran would otherwise catch an empty chase scene. A zero
+// step spawns and places everything without advancing the clock, the
+// mission timer, or the player.
+if (shotName) {
+  applyShot(state, shotName, audio);
+  updatePolice(state, 0, policeMeshes, world.scene);
+}
 if (state.autoplay) { state.started = true; }
 requestAnimationFrame(frame);
