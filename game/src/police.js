@@ -121,10 +121,17 @@ function makePoliceMesh(model) {
 export function createPolice(scene) {
   const meshes = new Map();
   const heli = new THREE.Group();
-  const navy = new THREE.MeshLambertMaterial({ color: 0x1d3557 });
+  // r6e: lighter steel-blue body + white belly stripe so the heli reads
+  // against the orange golden-hour sky instead of silhouetting to a
+  // black blob.
+  const navy = new THREE.MeshLambertMaterial({ color: 0x3a5a8a });
+  const stripeMat = new THREE.MeshLambertMaterial({ color: 0xf2f2f2 });
   const body = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 4.5, 12), navy);
   body.rotation.x = Math.PI / 2;
   heli.add(body);
+  const bellyStripe = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.5, 1.2), stripeMat);
+  bellyStripe.position.set(0, -0.2, -0.6);
+  heli.add(bellyStripe);
   const glass = new THREE.Mesh(new THREE.SphereGeometry(1.3, 12, 10), new THREE.MeshPhongMaterial({ color: 0x9fd8f2, shininess: 80, specular: 0xffffff }));
   glass.scale.set(1, 0.75, 1.1);
   glass.position.set(0, 0.2, -2.6);
@@ -433,7 +440,11 @@ export function updatePolice(state, dt, meshes, scene) {
       const rightZ = -Math.sin(road.angle);
       const ahead = dist * 1.1;
       const side = 5;
-      hy = alt - 7;
+      // r6e: a FORCED heli (countryside, 1 star) parks clearly HIGHER
+      // than the r6c one — the user said it flew too low. hy = alt - 3
+      // instead of alt - 7, so with heliAlt 24 the body sits well above
+      // the car with the spotlight cone still landing on it.
+      hy = state.shotForceHeli ? alt - 3 : alt - 7;
       hx = state.player.x + fwdX * ahead + rightX * side;
       hz = state.player.z + fwdZ * ahead + rightZ * side;
     } else {
