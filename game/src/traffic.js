@@ -1,3 +1,11 @@
+// City traffic and pedestrians for Solmar Bay 3D.
+//
+// Cars drive on the 60 m road grid: a vertical car stays on one x-road and
+// its `along` coordinate is its z; a horizontal car stays on one z-road and
+// its `along` is its x. The `lane` field is the car's offset from the
+// centreline (0 for ordinary traffic, +/-2.5 m for a staged lane), so a car
+// can sit in the left or right lane instead of dead centre. Pedestrians
+// walk the sidewalks at +/-6.5 m from the centreline.
 import * as THREE from 'three';
 import { CAR_MODELS } from './config.js';
 import { dist2d } from './random.js';
@@ -8,9 +16,13 @@ const Z_ROADS = [-240, -180, -120, -60, 0, 60, 120, 180, 240];
 const PED_COLORS = [0xe63946, 0x2a9d8f, 0xf2c14e, 0x7b2fbe, 0x1d3557, 0xe26d5a, 0x6a994e, 0xef476f];
 const SKINS = [0xe8b98a, 0xc98a5a, 0xf2c9a0, 0x8a5a3a];
 
-function lanePos(p) {
+function sidewalkPos(p) {
   if (p.vertical) return { x: p.road + p.side * 6.5, z: p.along };
   return { x: p.along, z: p.road + p.side * 6.5 };
+}
+
+function laneOf(car) {
+  return car.lane || 0;
 }
 
 export function spawnTraffic(state, scene) {
@@ -25,15 +37,17 @@ export function spawnTraffic(state, scene) {
     const dir = rng.chance(0.5) ? 1 : -1;
     const along = rng.range(-240, 240);
     const car = {
-      id: 't' + i, model, color, road, along, vertical, dir,
+      id: 't' + i, model, color, road, along, vertical, dir, lane: 0,
       speed: rng.range(9, 15), lightWait: 0, condition: 100,
       x: vertical ? road : along, z: vertical ? along : road,
       angle: vertical ? (dir > 0 ? 0 : Math.PI) : (dir > 0 ? Math.PI / 2 : -Math.PI / 2),
     };
     state.traffic.push(car);
     const mesh = makeCarMesh(model, color);
-    mesh.position.set(car.x, 0, car.z); mesh.rotation.y = car.angle;
-    scene.add(mesh); meshes.set(car.id, mesh);
+    mesh.position.set(car.x, 0, car.z);
+    mesh.rotation.y = car.angle;
+    scene.add(mesh);
+    meshes.set(car.id, mesh);
   }
   return meshes;
 }
@@ -47,21 +61,22 @@ export function updateTraffic(state, dt) {
     }
     if (car.lightWait > 0) {
       car.lightWait -= dt;
+    } else if (Math.abs(car.along % 60) < 0.6 && state.rng.chance(0.02)) {
+      car.lightWait = state.rng.range(1, 2);
     } else {
-      if (Math.abs(car.along % 60) < 0.6 && state.rng.chance(0.02)) car.lightWait = state.rng.range(1, 2);
-      else {
-        const near = dist2d(car.x, car.z, state.player.x, state.player.z) < 15;
-        const sp = near ? car.speed * 0.4 : car.speed;
-        car.along += car.dir * sp * dt;
-      }
+      const near = dist2d(car.x, car.z, state.player.x, state.player.z) < 15;
+      const sp = near ? car.speed * 0.4 : car.speed;
+      car.along += car.dir * sp * dt;
     }
     if (car.along > 250) car.along = -250;
     if (car.along < -250) car.along = 250;
     if (car.vertical) {
-      car.x = car.road; car.z = car.along;
+      car.x = car.road + laneOf(car);
+      car.z = car.along;
       car.angle = car.dir > 0 ? 0 : Math.PI;
     } else {
-      car.x = car.along; car.z = car.road;
+      car.x = car.along;
+      car.z = car.road + laneOf(car);
       car.angle = car.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
     }
   }
@@ -94,8 +109,11 @@ export function spawnPedestrians(state, scene) {
       phase: rng.next() * 6, targetX: 0, targetZ: 0, wait: 0,
       vertical, road, side, along, dir,
     };
-    const pos = lanePos(p);
-    p.x = pos.x; p.z = pos.z; p.targetX = p.x; p.targetZ = p.z;
+    const pos = sidewalkPos(p);
+    p.x = pos.x;
+    p.z = pos.z;
+    p.targetX = p.x;
+    p.targetZ = p.z;
     p.angle = vertical ? (dir > 0 ? 0 : Math.PI) : (dir > 0 ? Math.PI / 2 : -Math.PI / 2);
     state.peds.push(p);
     const g = new THREE.Group();
@@ -103,20 +121,28 @@ export function spawnPedestrians(state, scene) {
     const skinMat = new THREE.MeshLambertMaterial({ color: skin });
     const dark = new THREE.MeshLambertMaterial({ color: 0x2b2d42 });
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 0.45), shirt);
-    body.position.set(0, 1.3, 0); g.add(body);
+    body.position.set(0, 1.3, 0);
+    g.add(body);
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.45), skinMat);
-    head.position.set(0, 2.05, 0); g.add(head);
+    head.position.set(0, 2.05, 0);
+    g.add(head);
     const legL = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.8, 0.32), dark);
-    legL.position.set(-0.2, 0.4, 0); g.add(legL);
+    legL.position.set(-0.2, 0.4, 0);
+    g.add(legL);
     const legR = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.8, 0.32), dark);
-    legR.position.set(0.2, 0.4, 0); g.add(legR);
+    legR.position.set(0.2, 0.4, 0);
+    g.add(legR);
     const armL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.22), shirt);
-    armL.position.set(-0.52, 1.35, 0); g.add(armL);
+    armL.position.set(-0.52, 1.35, 0);
+    g.add(armL);
     const armR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.22), shirt);
-    armR.position.set(0.52, 1.35, 0); g.add(armR);
+    armR.position.set(0.52, 1.35, 0);
+    g.add(armR);
     g.userData = { legL, legR, armL, armR };
-    g.position.set(p.x, 0, p.z); g.rotation.y = p.angle;
-    scene.add(g); meshes.set(p.id, g);
+    g.position.set(p.x, 0, p.z);
+    g.rotation.y = p.angle;
+    scene.add(g);
+    meshes.set(p.id, g);
   }
   return meshes;
 }
@@ -135,8 +161,9 @@ export function updatePedestrians(state, dt) {
       p.phase += dt * 12;
       continue;
     }
-    if (p.wait > 0) { p.wait -= dt; }
-    else {
+    if (p.wait > 0) {
+      p.wait -= dt;
+    } else {
       p.along += p.dir * p.speed * dt;
       const limit = p.vertical ? 240 : 300;
       if (p.along > limit) { p.along = limit; p.dir = -1; }
@@ -145,21 +172,24 @@ export function updatePedestrians(state, dt) {
         if (p.vertical) {
           const cross = Math.round(p.along / 60) * 60;
           if (cross >= -240 && cross <= 240) {
-            p.vertical = false; p.road = cross;
+            p.vertical = false;
+            p.road = cross;
             p.along = Math.max(-300, Math.min(300, p.x));
           }
         } else {
           const cross = Math.round(p.along / 60) * 60;
           if (cross >= -300 && cross <= 300) {
-            p.vertical = true; p.road = cross;
+            p.vertical = true;
+            p.road = cross;
             p.along = Math.max(-240, Math.min(240, p.z));
           }
         }
       }
       p.phase += dt * 7;
     }
-    const pos = lanePos(p);
-    p.x = pos.x; p.z = pos.z;
+    const pos = sidewalkPos(p);
+    p.x = pos.x;
+    p.z = pos.z;
     p.angle = p.vertical ? (p.dir > 0 ? 0 : Math.PI) : (p.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
   }
 }
