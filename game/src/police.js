@@ -26,6 +26,8 @@ export const COP_SHOT_SLOTS = [
   { along: -2, lane: 2.5 },
   { along: 2, lane: -2.5 },
   { along: 6, lane: 2.5 },
+  { along: -6, lane: -2.5 },
+  { along: 10, lane: -2.5 },
 ];
 
 let sirenCounter = 0;
@@ -100,10 +102,10 @@ function addSiren(mesh) {
   blue.position.set(0.38, 1.7, 0);
   mesh.add(blue);
   const glowMat = new THREE.MeshBasicMaterial({
-    color: 0xff2222, transparent: true, opacity: 0.35,
+    color: 0xff2222, transparent: true, opacity: 0.22,
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
   });
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), glowMat);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.8), glowMat);
   glow.rotation.x = -Math.PI / 2;
   glow.position.set(0, 1.95, 0);
   mesh.add(glow);
@@ -280,7 +282,7 @@ export function updatePolice(state, dt, meshes, scene) {
       const pAlong = alongOf(road, state.player.x, state.player.z);
       const cAlong = alongOf(road, cop.x, cop.z);
       const cCross = crossOf(road, cop.x, cop.z);
-      const top = 30 + wanted * 4;
+      const top = wanted >= 5 ? 56 : 30 + wanted * 4;
       cop.speed += (top - cop.speed) * Math.min(1, dt * 0.8);
       if (Math.abs(cCross) <= 6) {
         // On the player's road: drive along it toward the player's
@@ -358,6 +360,20 @@ export function updatePolice(state, dt, meshes, scene) {
       meshes.set(rb.id, mesh);
     }
   }
+  // Five stars: maximum response — a second roadblock line further ahead,
+  // so the player has to break through two walls of cars.
+  if (wanted >= 5 && state.roadblocks.length === 3) {
+    const slots = roadblockSlots(state, 85);
+    for (let i = 0; i < slots.length; i++) {
+      const rb = { id: 'rb2' + (i - 1), x: slots[i].x, z: slots[i].z, angle: slots[i].angle, broken: false };
+      state.roadblocks.push(rb);
+      const mesh = makePoliceMesh(ROADBLOCK_MODEL);
+      mesh.position.set(rb.x, 0, rb.z);
+      mesh.rotation.y = rb.angle;
+      scene.add(mesh);
+      meshes.set(rb.id, mesh);
+    }
+  }
   if (wanted < 3 && state.roadblocks.length > 0) {
     for (const rb of state.roadblocks) {
       const m = meshes.get(rb.id);
@@ -392,7 +408,10 @@ export function updatePolice(state, dt, meshes, scene) {
   const cone = meshes.get('heliCone');
   const spotTarget = meshes.get('heliSpotTarget');
   if (wanted >= 3 && heli) {
-    const dist = state.heliDist ?? 26;
+    // Five stars: the helicopter closes in — nearer, so the spotlight
+    // stays glued to the player and escape gets much harder. Altitude is
+    // untouched: in staged shots a lower heli would clip the chase cars.
+    const dist = wanted >= 5 ? (state.heliDist ?? 26) * 0.85 : (state.heliDist ?? 26);
     const alt = state.heliAlt ?? 22;
     let hy = alt - 4;
     let hx;
@@ -467,7 +486,7 @@ export function syncPoliceMeshes(meshes, state) {
     siren.red.color.setHex(on ? 0xff2a2a : 0x551111);
     siren.blue.color.setHex(on ? 0x141448 : 0x2a5cff);
     siren.glow.color.setHex(on ? 0xff2a2a : 0x2a5cff);
-    siren.glow.opacity = 0.3;
+    siren.glow.opacity = 0.22;
   };
   for (const cop of state.police) {
     const m = meshes.get(cop.id);
