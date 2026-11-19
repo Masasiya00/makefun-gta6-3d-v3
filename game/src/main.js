@@ -145,6 +145,17 @@ function updateCamera(dt) {
     camera.lookAt(p.x + fwdX * 14, 2, p.z + fwdZ * 14);
     return;
   }
+  // r6e city shot: elevated behind-character framing for the SA alley.
+  // The camera sits behind and above Mara, looking down the dirt alley
+  // between the brick walls: she reads from behind in the lower centre,
+  // the walls frame the shot, and past the mouth the neighbourhood, the
+  // overpass and the skyline stack up in the haze. This branch sets the
+  // camera directly and returns before the normal chase easing.
+  if (state.cameraShot === 'city') {
+    camera.position.set(p.x, 7.5, p.z + 10);
+    camera.lookAt(p.x, 3.5, p.z - 26);
+    return;
+  }
   // Mouse look steers the camera yaw; while driving it eases back behind the car.
   state.cameraYaw -= input.lookDX * 0.0032;
   if (p.inCar) {
