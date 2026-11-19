@@ -1,119 +1,144 @@
-// Every tuning number, name and colour in one place. The city is a fixed
-// 3600 x 2600 metre map; the ocean lies west of x = -1500.
-export const STEP = 1 / 60;
-export const WORLD = { minX: -1800, maxX: 1800, minZ: -1300, maxZ: 1300, beachX: -1500, waterX: -1560 };
-export const SAVE_KEY = 'solmar-bay.save.v3';
+// Shared game data and the single mutable game state for Solmar Bay 3D.
+// Every module reads and writes this one state object; rendering only reads it.
+import { makeRng, clamp } from './random.js';
 
-// Roads: vertical avenues and horizontal streets, 12 m wide.
-export const ROADS_X = [-1400, -1000, -600, -200, 200, 600, 1000, 1400];
-export const ROADS_Z = [-1000, -600, -200, 200, 600, 1000];
-export const ROAD_W = 12;
+export const WORLD = { halfX: 360, halfZ: 260, beachX: -300, oceanX: -420 };
 
 export const DISTRICTS = [
-  { name: 'Palm Beach', x0: -1800, z0: -1300, x1: -1400, z1: 1300, color: 0xe8d8a0 },
-  { name: 'Old Town', x0: -1400, z0: -1300, x1: -1000, z1: -200, color: 0xd98a5f },
-  { name: 'Dockside', x0: -1400, z0: -200, x1: -1000, z1: 600, color: 0x8a94a0 },
-  { name: 'Airfield', x0: -1400, z0: 600, x1: -1000, z1: 1300, color: 0x9aa5a0 },
-  { name: 'Downtown', x0: -200, z0: -600, x1: 1000, z1: 200, color: 0x5f7fb0 },
-  { name: 'Marina', x0: 600, z0: -1300, x1: 1400, z1: -600, color: 0x4fa8c8 },
-  { name: 'Coral Heights', x0: 1000, z0: -600, x1: 1800, z1: 200, color: 0xc88a9a },
-  { name: 'Bayview', x0: -1000, z0: -1300, x1: -200, z1: -600, color: 0x7fb069 },
-  { name: 'Fairground', x0: -1000, z0: 600, x1: -200, z1: 1300, color: 0xe06a9a },
-  { name: 'University', x0: -200, z0: 200, x1: 600, z1: 1000, color: 0x8a6fc8 },
-  { name: 'Stadium', x0: 600, z0: 200, x1: 1400, z1: 1000, color: 0xd0a03c },
-  { name: 'Lighthouse Point', x0: 1400, z0: -600, x1: 1800, z1: 1300, color: 0x6a8a9a },
+  { name: 'Palm Beach', x: -300, z: 40, color: 0xf2d8a0, style: 'beach' },
+  { name: 'Old Town', x: -170, z: 140, color: 0xe8a06a, style: 'oldtown' },
+  { name: 'Dockside', x: -220, z: -190, color: 0x8a94a6, style: 'docks' },
+  { name: 'Downtown', x: 20, z: -10, color: 0x9fb8d8, style: 'downtown' },
+  { name: 'Marina', x: -280, z: -120, color: 0x7fd4c8, style: 'marina' },
+  { name: 'Coral Heights', x: 180, z: -180, color: 0xc9a0d8, style: 'hills' },
+  { name: 'Airfield', x: 240, z: 140, color: 0xb8b8b0, style: 'airfield' },
+  { name: 'Bayview', x: 120, z: 180, color: 0x9fd89a, style: 'suburb' },
+  { name: 'Fairground', x: -60, z: 200, color: 0xf28ab2, style: 'fair' },
+  { name: 'University', x: 200, z: 40, color: 0x8ab2f2, style: 'campus' },
+  { name: 'Stadium', x: 60, z: -200, color: 0xd8d8d8, style: 'stadium' },
+  { name: 'Lighthouse Point', x: -330, z: 220, color: 0xf2e6c8, style: 'cliff' },
 ];
 
 export function districtAt(x, z) {
+  let best = DISTRICTS[0], bestD = Infinity;
   for (const d of DISTRICTS) {
-    if (x >= d.x0 && x < d.x1 && z >= d.z0 && z < d.z1) return d.name;
+    const dx = x - d.x, dz = z - d.z, dd = dx * dx + dz * dz;
+    if (dd < bestD) { bestD = dd; best = d; }
   }
-  return 'Solmar Bay';
+  return best;
 }
 
-// Eight drivable models. topSpeed in m/s, accel, grip and price shape each one.
-export const CARS = [
-  { id: 'hatch', name: 'Pip Hatch', kind: 'hatchback', top: 34, accel: 16, grip: 2.6, colors: [0xe8e8e8, 0x4fa8c8, 0xf2c94c], price: 0 },
-  { id: 'sedan', name: 'Coral Sedan', kind: 'sedan', top: 38, accel: 18, grip: 2.4, colors: [0x2a3040, 0x8a94a0, 0x7fb069], price: 1200 },
-  { id: 'coupe', name: 'Vela Coupe', kind: 'coupe', top: 48, accel: 24, grip: 2.2, colors: [0xd43d2a, 0xf2c94c, 0x111111], price: 4500 },
-  { id: 'suv', name: 'Tide SUV', kind: 'suv', top: 36, accel: 15, grip: 2.8, colors: [0x3c5a78, 0xe8e8e8, 0x5a3c2a], price: 3200 },
-  { id: 'pickup', name: 'Dune Pickup', kind: 'pickup', top: 35, accel: 15, grip: 2.7, colors: [0x7a4a2a, 0x4a6a3a, 0x9aa5a0], price: 2800 },
-  { id: 'taxi', name: 'Bay Taxi', kind: 'taxi', top: 37, accel: 17, grip: 2.5, colors: [0xf2c94c], price: 0 },
-  { id: 'convert', name: 'Sol Convertible', kind: 'convertible', top: 44, accel: 21, grip: 2.3, colors: [0xe06a9a, 0x4fa8c8, 0xffffff], price: 6000 },
-  { id: 'lowrider', name: 'Palm Lowrider', kind: 'lowrider', top: 40, accel: 19, grip: 2.0, colors: [0x7a2a8a, 0x2a8a6a, 0xc8a03c], price: 5200 },
+export const CAR_MODELS = [
+  { id: 'hatch', name: 'Pip Squeak', top: 34, accel: 16, grip: 2.6, colors: [0xf2c14e, 0x7ec8e3, 0xe26d5a] },
+  { id: 'sedan', name: 'Solmar Regent', top: 40, accel: 18, grip: 2.8, colors: [0x3a6ea5, 0x8a8f98, 0x222831] },
+  { id: 'coupe', name: 'Veloz Comet RS', top: 52, accel: 26, grip: 3.4, colors: [0xe63946, 0xff8c00, 0x1d3557] },
+  { id: 'suv', name: 'Bayside Titan', top: 38, accel: 15, grip: 2.4, colors: [0x2f5233, 0x6b705c, 0xdde5b6] },
+  { id: 'pickup', name: 'Coral Hauler', top: 36, accel: 15, grip: 2.5, colors: [0x7a3b2e, 0x4a6fa5, 0xc9c9c9] },
+  { id: 'taxi', name: 'Bay Cab', top: 38, accel: 17, grip: 2.7, colors: [0xffc300, 0xffc300, 0xffc300] },
+  { id: 'convertible', name: 'Sunset Spyder', top: 48, accel: 23, grip: 3.1, colors: [0xff5d8f, 0xffffff, 0x00b4d8] },
+  { id: 'lowrider', name: 'Palm Low', top: 42, accel: 19, grip: 2.9, colors: [0x6a0dad, 0x00a896, 0xf3722c] },
 ];
 
 export const WEAPONS = [
-  { id: 'fists', name: 'Fists', slot: 0, damage: 12, rate: 2.2, range: 2.2, ammo: Infinity, price: 0, auto: false },
-  { id: 'pistol', name: 'P9 Pistol', slot: 1, damage: 22, rate: 3.5, range: 55, ammo: 120, price: 400, auto: false },
-  { id: 'smg', name: 'Sting SMG', slot: 2, damage: 13, rate: 9, range: 45, ammo: 240, price: 1200, auto: true },
-  { id: 'shotgun', name: 'Boomstick', slot: 3, damage: 9, rate: 1.1, range: 22, ammo: 40, price: 900, auto: false, pellets: 7 },
+  { id: 'fists', name: 'FISTS', price: 0, damage: 12, rate: 2.2, range: 2.2, ammo: Infinity, auto: false },
+  { id: 'pistol', name: 'VESPER', price: 350, damage: 22, rate: 3.5, range: 55, ammo: 72, auto: false },
+  { id: 'smg', name: 'MAKO', price: 1200, damage: 14, rate: 9, range: 48, ammo: 150, auto: true },
+  { id: 'shotgun', name: 'BREAKER', price: 2600, damage: 70, rate: 1.1, range: 26, ammo: 24, auto: false },
+  { id: 'rifle', name: 'KESTREL', price: 5200, damage: 45, rate: 6, range: 90, ammo: 60, auto: true },
 ];
-// Slot 4 is the locked "Sniper" teaser shown in the wheel.
-export const LOCKED_SLOT = { id: 'sniper', name: 'Longshot', slot: 4, price: 3500 };
 
 export const RESPECT_RANKS = [
-  { name: 'Rookie', need: 0 },
-  { name: 'Wheelman', need: 120 },
-  { name: 'Shot Caller', need: 350 },
-  { name: 'King of the Bay', need: 800 },
+  { name: 'ROOKIE', need: 0 },
+  { name: 'WHEELMAN', need: 150 },
+  { name: 'SHOT CALLER', need: 550 },
+  { name: 'KING OF THE BAY', need: 1200 },
 ];
 
 export const SHOPS = [
-  { id: 'garage', name: "Rosa's Garage", x: -1180, z: -420, color: '#e06a4f', blurb: 'Repairs, armour and garage upgrades.' },
-  { id: 'arms', name: 'Ironworks Arms', x: 120, z: -420, color: '#8a94a0', blurb: 'Weapons and ammunition.' },
-  { id: 'tacos', name: 'Tico Tacos', x: -820, z: -820, color: '#f2c94c', blurb: 'Food that restores health.' },
-  { id: 'threads', name: 'Neon Threads', x: 420, z: 120, color: '#e06a9a', blurb: 'Clothes that change your colours.' },
-  { id: 'motors', name: 'Marina Motors', x: 980, z: -980, color: '#4fa8c8', blurb: 'Buy owned cars, unlocked by respect.' },
+  { id: 'garage', name: "Rosa's Garage", x: -168, z: 118, kind: 'garage', blurb: 'Repairs, armour & garage upgrades' },
+  { id: 'arms', name: 'Ironworks Arms', x: 42, z: 18, kind: 'arms', blurb: 'Weapons & ammunition' },
+  { id: 'tacos', name: 'Tico Tacos', x: -148, z: 96, kind: 'food', blurb: 'Hot food restores health' },
+  { id: 'threads', name: 'Neon Threads', x: -6, z: 42, kind: 'clothes', blurb: 'Fresh threads, new colours' },
+  { id: 'motors', name: 'Marina Motors', x: -262, z: -138, kind: 'motors', blurb: 'Buy cars, unlocked by respect' },
 ];
 
 export const GARAGE_UPGRADES = [
-  { id: 'engine', name: 'Turbo Engine', price: 800, desc: '+15% top speed' },
-  { id: 'brakes', name: 'Race Brakes', price: 500, desc: 'Much stronger braking' },
-  { id: 'plating', name: 'Armour Plating', price: 700, desc: 'Car takes half damage' },
+  { id: 'engine', name: 'Turbo Engine', price: 900, desc: '+25% top speed' },
+  { id: 'brakes', name: 'Race Brakes', price: 500, desc: 'Sharper braking & grip' },
+  { id: 'plating', name: 'Armour Plating', price: 1100, desc: 'Car takes half damage' },
 ];
 
 export const RADIO_STATIONS = [
-  { id: 'sunset', name: 'SUNSET 88.4', song: 'Golden Hour Drift', mood: 'chill' },
-  { id: 'dance', name: 'BAY FM 101', song: 'Neon Tide', mood: 'dance' },
-  { id: 'talk', name: 'TALK BAY 1290', song: 'The Rosa Hour', mood: 'talk' },
-];
-
-export const TALK_LINES = [
-  'Rosa: Mara, the bay never sleeps. Neither do the cops.',
-  'DJ Sal: Traffic on the causeway is a nightmare, folks. Take the coast road.',
-  'Rosa: You want respect in this town? Earn it behind the wheel.',
-  'DJ Sal: And remember — if the helicopter is over you, you are famous.',
-  'Rosa: Garage is open all night. Bring the car back in one piece, yeah?',
+  { name: 'CELESTE 98.1', song: 'Malecón Mirage · Vela Roja', mood: 'chill' },
+  { name: 'BAY FM 104.7', song: 'Neon Tide · DJ Coral', mood: 'dance' },
+  { name: 'TALK BAY 88.3', song: 'The Rosa Hour · call-ins live', mood: 'talk' },
 ];
 
 export const MISSIONS = [
-  { id: 1, name: 'First Wheels', reward: 300, respect: 40, brief: 'Meet Rosa at her garage, take the Coral Sedan and drive it back to the garage.', start: { x: -1180, z: -420 }, target: { x: -1180, z: -406 }, type: 'drive' },
-  { id: 2, name: 'Beach Run', reward: 450, respect: 60, brief: 'You are at two stars. Break line of sight and stay hidden until the heat fades.', start: { x: -1500, z: 200 }, target: null, type: 'escape', stars: 2 },
-  { id: 3, name: 'Hot Pursuit', reward: 600, respect: 70, brief: 'Survive a 45-second three-star chase. The helicopter is already in the air.', start: { x: 200, z: -200 }, target: null, type: 'survive', seconds: 45, stars: 3 },
-  { id: 4, name: 'Dockside Deal', reward: 800, respect: 80, brief: 'Carry the package across the city to the docks. Do not let the police see you.', start: { x: -1180, z: -420 }, target: { x: -1180, z: 200 }, type: 'deliver' },
-  { id: 5, name: 'Night Shift', reward: 1000, respect: 90, brief: 'A night delivery through Downtown. Traffic is thick and patrols are out.', start: { x: 200, z: -200 }, target: { x: 120, z: -420 }, type: 'deliver', night: true },
-  { id: 6, name: 'High Tide Heist', reward: 1500, respect: 120, brief: 'Rob the Marina store, then escape a four-star response. The guards are armed.', start: { x: 980, z: -980 }, target: { x: 980, z: -980 }, type: 'rob', stars: 4 },
-  { id: 7, name: 'The Getaway', reward: 2000, respect: 140, brief: 'A long chase across four districts to the hideout in Coral Heights.', start: { x: 200, z: -200 }, target: { x: 1200, z: -200 }, type: 'drive', stars: 2 },
-  { id: 8, name: 'Fairground Rush', reward: 1750, respect: 130, brief: 'Win a street race through the Fairground at dusk. Hit every checkpoint.', start: { x: -600, z: 1000 }, target: null, type: 'race', seconds: 90 },
-  { id: 9, name: 'Campus Courier', reward: 1200, respect: 100, brief: 'Timed deliveries across the University and the Stadium. 75 seconds.', start: { x: 200, z: 600 }, target: null, type: 'race', seconds: 75 },
-  { id: 10, name: 'Lighthouse Run', reward: 2200, respect: 160, brief: 'A five-star escape along the coast to Lighthouse Point. Do not stop.', start: { x: -1500, z: -600 }, target: { x: 1600, z: 800 }, type: 'drive', stars: 5 },
-  { id: 11, name: 'The Convoy', reward: 2500, respect: 180, brief: 'Ram the police roadblock on the causeway and break through to the other side.', start: { x: 600, z: -200 }, target: { x: 1400, z: -200 }, type: 'ram', stars: 3 },
-  { id: 12, name: 'King of the Bay', reward: 3000, respect: 250, brief: 'The finale: five stars, the whole bay hunting you. Reach the marina alive.', start: { x: 200, z: -200 }, target: { x: 980, z: -966 }, type: 'drive', stars: 5 },
+  { id: 1, name: 'First Wheels', reward: 300, speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: "Mara, you're new in Solmar Bay. My garage needs a driver. Take the coupe out front and bring it back to me.", objective: 'Meet Rosa at her garage', next: 'Take the coupe and drive it back' },
+  { id: 2, name: 'Beach Run', reward: 450, speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'The cops are sniffing around Palm Beach. Lose that two-star tail — stay out of sight and let the heat die.', objective: 'Lose the 2-star pursuit', next: 'Break line of sight until stars fade' },
+  { id: 3, name: 'Hot Pursuit', reward: 600, speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'Three stars now, and the chopper is up. Survive 45 seconds of this chase and get to the hideout.', objective: 'Survive the 3-star chase — 45s', next: 'Keep moving, dodge the roadblocks' },
+  { id: 4, name: 'Dockside Deal', reward: 800, speaker: 'Dario', role: 'DOCK FIXER', color: '#54a0ff', text: 'A package needs to reach the docks, no questions. Carry it across town and keep the cops off your back.', objective: 'Carry the package to Dockside', next: 'Avoid police on the way' },
+  { id: 5, name: 'Night Shift', reward: 1000, speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'Night delivery through Downtown. Traffic is thick and patrols are out. Drive smooth, drive fast.', objective: 'Night delivery through Downtown', next: 'Reach the drop-off before dawn' },
+  { id: 6, name: 'High Tide Heist', reward: 1500, speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'We hit the Marina store at high tide. Grab the cash, then shake a four-star response. No hesitation.', objective: 'Rob the Marina store & escape', next: 'Grab the cash, then lose 4 stars' },
+  { id: 7, name: 'The Getaway', reward: 2000, speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'Long chase, four districts, one hideout. They will throw everything at us. Drive like the bay is on fire.', objective: 'Cross 4 districts to the hideout', next: 'Stay ahead of the pursuit' },
+  { id: 8, name: 'Fairground Rush', reward: 1750, speaker: 'Kiko', role: 'STREET RACER', color: '#f368e0', text: 'Street race through the Fairground at dusk. Beat the pack to the ferris wheel and the pot is yours.', objective: 'Win the Fairground street race', next: 'Beat the rival cars to the wheel' },
+  { id: 9, name: 'Campus Courier', reward: 1200, speaker: 'Ana', role: 'STUDENT FIXER', color: '#1dd1a1', text: 'Timed deliveries across the University and the Stadium. Three drops, one clock. Do not be late.', objective: 'Timed deliveries: University & Stadium', next: 'Hit all three drops before the timer' },
+  { id: 10, name: 'Lighthouse Run', reward: 2200, speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'Five stars, Mara. Coast road to Lighthouse Point, cops everywhere. If you make it, the whole bay knows your name.', objective: 'Five-star escape to Lighthouse Point', next: 'Reach the lighthouse alive' },
+  { id: 11, name: 'The Convoy', reward: 2500, speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'A police roadblock sits on the causeway. Ram straight through it and break the convoy. Full speed, no brakes.', objective: 'Ram the causeway roadblock', next: 'Smash through and keep going' },
+  { id: 12, name: 'King of the Bay', reward: 3000, speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'The finale. Five stars, the whole city hunting you. Survive it all and reach the marina — then the bay is yours.', objective: 'Survive 5 stars & reach the Marina', next: 'Reach Marina Motors alive' },
 ];
 
-export const DIALOGUE = {
-  rosa: { name: 'Rosa', color: '#e06a4f', portrait: 'R' },
-  mara: { name: 'Mara', color: '#4fa8c8', portrait: 'M' },
-  sal: { name: 'DJ Sal', color: '#f2c94c', portrait: 'S' },
-  cop: { name: 'Dispatch', color: '#8a94a0', portrait: 'D' },
-};
+export function createState(seed) {
+  const rng = makeRng(seed);
+  const s = {
+    seed, rng, time: 0, clockMin: 18 * 60 + 48, day: 1,
+    money: 250, health: 100, armour: 0, wanted: 0, heat: 0,
+    respect: 0, respectRank: 0, inSight: false, lastSeen: { x: 0, z: 0 },
+    searchZone: { x: 0, z: 0, r: 60 },
+    player: { x: -150, z: 100, angle: 0, speed: 0, onFoot: true, inCar: false, carId: null, walkPhase: 0 },
+    cars: [], traffic: [], peds: [], police: [], roadblocks: [], pickups: [], enemies: [],
+    heli: null, heliAngle: 0,
+    missionIndex: 0, missionActive: false, missionStage: 0, missionTimer: 0,
+    missionDone: [], missionText: '', missionNext: '', missionProgress: 0,
+    dialogue: null, dialogueT: 0,
+    weaponsOwned: [true, false, false, false, false], ammo: [Infinity, 0, 0, 0, 0],
+    weaponIndex: 0, ownedCars: [], upgrades: { engine: false, brakes: false, plating: false },
+    outfit: 0, radio: 0, muted: false, paused: false, started: false,
+    busted: false, wasted: false, victory: false, gameOver: false,
+    shot: null, autoplay: false, autoResult: null, fps: 0, frameMs: 0,
+    cameraMode: 'chase', shake: 0, speedKmh: 0, gear: 1,
+    shopNear: null, shopOpen: false, message: '', messageT: 0,
+    stats: { carsStolen: 0, shotsFired: 0, escapes: 0, missionsDone: 0 },
+    flags: {},
+  };
+  return s;
+}
 
-export const PALETTE = {
-  skyDay: 0x87b5d9, skySunset: 0xff9a52, skyNight: 0x0e1424,
-  sunDay: 0xfff2d8, sunSunset: 0xff7a2a, sunNight: 0x8fa8d8,
-  road: 0x2e3238, sidewalk: 0x9a938a, grass: 0x6a9a4f, sand: 0xe8d8a0,
-  water: 0x2a7a9a, text: '#eef1f5', muted: '#9aa3ad', accent: '#ff5c8a',
-};
+export function respectRankFor(points) {
+  let r = 0;
+  for (let i = 0; i < RESPECT_RANKS.length; i++) if (points >= RESPECT_RANKS[i].need) r = i;
+  return r;
+}
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+export function addRespect(state, n) {
+  state.respect += n;
+  state.respectRank = respectRankFor(state.respect);
+}
+
+export function addWanted(state, n) {
+  state.wanted = clamp(state.wanted + n, 0, 5);
+  state.heat = Math.max(state.heat, state.wanted * 20);
+}
+
+export function formatClock(mins) {
+  const h = Math.floor(mins / 60) % 24, m = Math.floor(mins % 60);
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+export function timeOfDay(state) {
+  const h = (state.clockMin / 60) % 24;
+  if (h >= 6 && h < 17) return 'day';
+  if (h >= 17 && h < 19.5) return 'golden';
+  return 'night';
+}
