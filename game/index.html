@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOLMAR BAY 3D</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23ff5c8a'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white'%3ES%3C/text%3E%3C/svg%3E">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1424; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #eef1f5; z-index: 5; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .hud-tl { position: absolute; top: 14px; left: 16px; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  .money { font-size: 26px; font-weight: 800; color: #7ee787; }
+  .district { font-size: 15px; font-weight: 700; }
+  .clock { font-size: 13px; color: #cfd6dd; }
+  .respect { margin-top: 6px; font-size: 13px; font-weight: 700; }
+  .respect-bar { width: 150px; height: 6px; background: rgba(255,255,255,.25); border-radius: 3px; margin-top: 3px; }
+  .respect-fill { height: 100%; background: #ff5c8a; border-radius: 3px; width: 0%; }
+  .hud-tr { position: absolute; top: 14px; right: 16px; text-align: right; }
+  .stars { font-size: 26px; letter-spacing: 2px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  .insight { margin-top: 4px; font-size: 13px; font-weight: 800; color: #ff5c5c; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 4px; display: inline-block; }
+  .police-panel { position: absolute; top: 96px; right: 16px; width: 250px; background: rgba(10,16,24,.78); border: 1px solid rgba(255,92,92,.5); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .panel-title { font-weight: 800; letter-spacing: 1px; color: #ff8a8a; }
+  .panel-code { color: #ffd98a; font-weight: 700; margin: 4px 0 6px; }
+  .panel-rows div { padding: 2px 0; border-top: 1px solid rgba(255,255,255,.12); }
+  .tracker { position: absolute; top: 120px; left: 16px; width: 300px; background: rgba(10,16,24,.72); border-left: 4px solid #ffe14d; border-radius: 6px; padding: 10px 12px; }
+  .tracker-title { font-weight: 800; font-size: 14px; color: #ffe14d; }
+  .tracker-text { font-size: 14px; margin-top: 4px; }
+  .tracker-next { font-size: 12px; color: #9fd8ff; margin-top: 4px; }
+  .tracker-bar { height: 6px; background: rgba(255,255,255,.25); border-radius: 3px; margin-top: 8px; }
+  .tracker-fill { height: 100%; background: #ffe14d; border-radius: 3px; width: 0%; }
+  .tracker-timer { font-size: 15px; font-weight: 800; margin-top: 6px; color: #ff9a5c; }
+  .hud-bl { position: absolute; left: 16px; bottom: 16px; }
+  .bars { width: 220px; }
+  .bar { height: 12px; background: rgba(0,0,0,.55); border-radius: 6px; margin-bottom: 5px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; }
+  .bar-fill.health { background: #2ac85a; width: 100%; }
+  .bar-fill.armour { background: #2a7ac8; width: 0%; }
+  .weapon { font-size: 15px; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  .slots { display: flex; gap: 5px; margin-top: 6px; }
+  .slot { font-size: 11px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.25); border-radius: 5px; padding: 4px 6px; }
+  .slot.active { border-color: #ffe14d; color: #ffe14d; }
+  .slot.locked { opacity: .45; }
+  .hud-br { position: absolute; right: 16px; bottom: 16px; text-align: right; }
+  .vehicle { font-size: 15px; font-weight: 700; background: rgba(0,0,0,.55); padding: 6px 10px; border-radius: 6px; display: inline-block; margin-bottom: 6px; }
+  .radio { font-size: 13px; font-weight: 700; color: #ffd98a; text-shadow: 0 1px 3px rgba(0,0,0,.8); margin-bottom: 4px; }
+  .talk { font-size: 12px; color: #cfd6dd; font-style: italic; text-shadow: 0 1px 3px rgba(0,0,0,.8); margin-bottom: 6px; max-width: 320px; }
+  .map-wrap { position: relative; width: 220px; height: 220px; margin-left: auto; }
+  .minimap { width: 220px; height: 220px; border-radius: 50%; border: 3px solid rgba(255,255,255,.65); box-shadow: 0 2px 12px rgba(0,0,0,.5); }
+  .map-north { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); font-weight: 800; font-size: 13px; color: #fff; text-shadow: 0 1px 2px #000; }
+  .crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 26px; font-weight: 800; color: #fff; text-shadow: 0 0 4px #000; }
+  .hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 30px; font-weight: 800; color: #ff5c5c; text-shadow: 0 0 4px #000; }
+  .toast { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); background: rgba(10,16,24,.85); border: 1px solid rgba(255,225,77,.6); padding: 10px 18px; border-radius: 8px; font-size: 16px; font-weight: 700; }
+  .interact { position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 8px 14px; border-radius: 6px; font-size: 14px; font-weight: 700; }
+  .dialogue { position: absolute; left: 50%; bottom: 130px; transform: translateX(-50%); width: 620px; max-width: 92vw; background: rgba(10,16,24,.88); border: 1px solid rgba(255,255,255,.3); border-radius: 10px; padding: 14px; display: flex; gap: 14px; }
+  .dlg-portrait { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; flex: none; }
+  .dlg-body { flex: 1; }
+  .dlg-name { font-weight: 800; font-size: 15px; }
+  .dlg-text { font-size: 15px; margin-top: 4px; line-height: 1.45; }
+  .dlg-hint { font-size: 11px; color: #9aa3ad; margin-top: 6px; }
+  .wheel { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); background: rgba(10,16,24,.9); border: 1px solid rgba(255,255,255,.3); border-radius: 12px; padding: 16px 20px; min-width: 340px; }
+  .wheel-title { font-weight: 800; letter-spacing: 2px; margin-bottom: 8px; }
+  .wheel-row { padding: 7px 8px; border-radius: 6px; font-size: 14px; }
+  .wheel-row.active { background: rgba(255,225,77,.25); color: #ffe14d; }
+  .wheel-row.locked { opacity: .5; }
+  .shop { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); background: rgba(10,16,24,.94); border: 1px solid rgba(255,255,255,.3); border-radius: 12px; padding: 18px 22px; min-width: 420px; pointer-events: auto; }
+  .shop-name { font-size: 20px; font-weight: 800; }
+  .shop-blurb { font-size: 13px; color: #9aa3ad; margin: 4px 0 12px; }
+  .shop-item { padding: 9px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; border: 1px solid transparent; }
+  .shop-item:hover { background: rgba(255,255,255,.08); border-color: rgba(255,225,77,.5); }
+  .shop-item.disabled { opacity: .45; cursor: default; }
+  .shop-item span { color: #9aa3ad; font-size: 12px; }
+  .shop-hint { font-size: 12px; color: #9aa3ad; margin-top: 10px; }
+  .screen { position: absolute; inset: 0; background: rgba(8,12,20,.82); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: auto; padding: 20px; }
+  .screen-title { font-size: 52px; margin: 0; letter-spacing: 4px; color: #ffe14d; text-shadow: 0 3px 18px rgba(255,92,138,.6); }
+  .screen-sub { font-size: 17px; color: #cfd6dd; margin-top: 8px; max-width: 640px; }
+  .screen-body { font-size: 15px; line-height: 1.6; margin-top: 16px; max-width: 640px; text-align: left; }
+  .screen-buttons { margin-top: 22px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .screen-btn { pointer-events: auto; cursor: pointer; font-size: 16px; font-weight: 700; padding: 12px 22px; border-radius: 8px; border: none; background: #ff5c8a; color: #fff; }
+  .screen-btn:hover { background: #ff7aa5; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="SOLMAR BAY 3D: an open-world crime game in the coastal city of Solmar Bay"></canvas>
+<div id="hud"></div>
+<p id="status" role="status" aria-live="polite"></p>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
