@@ -308,7 +308,9 @@ export function drawMinimap(state, canvas) {
     ctx.arc(sx(cop.x), sy(cop.z), 3.5, 0, Math.PI * 2);
     ctx.fill();
   }
-  if (state.heli && state.wanted >= 3) {
+  // r6c: same shot-force rule as the SBPD panel (police.js) — the heli
+  // blip shows whenever the heli is actually flying, not only at 3+ stars.
+  if (state.heli && (state.wanted >= 3 || state.shotForceHeli)) {
     ctx.fillStyle = '#ff5d8f';
     ctx.beginPath();
     ctx.arc(sx(state.heli.x), sy(state.heli.z), 4, 0, Math.PI * 2);
