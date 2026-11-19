@@ -1,140 +1,108 @@
-// Combat: fists, pistol, SMG and shotgun with their own fire rate, damage,
-// range and sound; hitscan shots with a tracer line, muzzle flash, hit marker
-// and damage numbers; mission enemies who take cover and shoot back; health,
-// armour and cash pickups scattered around the city and dropped by enemies.
+// Combat for Solmar Bay 3D: fists, pistol, SMG, shotgun and rifle, weapon
+// wheel slots with ammo, muzzle flash, tracers, hit markers and enemies.
+import * as THREE from 'three';
 import { WEAPONS } from './config.js';
+import { dist2d, angleTo, wrapAngle } from './random.js';
+import { playGunshot, playPunch } from './audio.js';
 
-export function createCombat(THREE, scene, rng) {
-  const tracers = [];
-  const tracerMat = new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.9 });
-  const enemies = [];
-  const pickups = [];
-  const pickupGroup = new THREE.Group();
-  scene.add(pickupGroup);
-
-  function spawnTracer(from, to) {
-    const geo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(from.x, from.y, from.z),
-      new THREE.Vector3(to.x, to.y, to.z),
-    ]);
-    const line = new THREE.Line(geo, tracerMat.clone());
-    scene.add(line);
-    tracers.push({ line, life: 0.09 });
-  }
-
-  function makeEnemyMesh(shirtColor) {
-    const g = new THREE.Group();
-    const shirt = new THREE.MeshLambertMaterial({ color: shirtColor });
-    const skin = new THREE.MeshLambertMaterial({ color: 0xc98a5a });
-    const pants = new THREE.MeshLambertMaterial({ color: 0x222222 });
-    const add = (w, h, d, mat, x, y, z) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-      m.position.set(x, y, z); g.add(m); return m;
-    };
-    add(0.16, 0.6, 0.16, pants, -0.12, 0.32, 0);
-    add(0.16, 0.6, 0.16, pants, 0.12, 0.32, 0);
-    add(0.55, 0.65, 0.3, shirt, 0, 0.95, 0);
-    add(0.36, 0.36, 0.34, skin, 0, 1.48, 0);
-    const gun = add(0.08, 0.12, 0.45, new THREE.MeshLambertMaterial({ color: 0x111111 }), 0.3, 1.05, 0.25);
-    return { group: g, gun };
-  }
-
-  function spawnEnemy(x, z) {
-    const mesh = makeEnemyMesh(0x8a2a2a);
-    mesh.group.position.set(x, 0, z);
-    scene.add(mesh.group);
-    const e = { mesh, x, z, health: 60, cooldown: rng.range(0.5, 1.5), alive: true, heading: 0 };
-    enemies.push(e);
-    return e;
-  }
-
-  function spawnPickup(kind, x, z, amount) {
-    const color = kind === 'health' ? 0x2ac85a : kind === 'armour' ? 0x2a7ac8 : 0xf2c94c;
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshLambertMaterial({ color }));
-    m.position.set(x, 0.7, z);
-    m.rotation.y = Math.PI / 4;
-    pickupGroup.add(m);
-    pickups.push({ kind, mesh: m, x, z, amount, bob: rng.range(0, 6) });
-  }
-
-  function clearEnemies() {
-    for (const e of enemies) scene.remove(e.mesh.group);
-    enemies.length = 0;
-  }
-
-  return {
-    enemies, pickups, tracerCount: () => tracers.length,
-    spawnEnemy, spawnPickup, clearEnemies,
-    step(dt, playerPos, time) {
-      for (const t of tracers) { t.life -= dt; if (t.life <= 0) { scene.remove(t.line); t.line.geometry.dispose(); } }
-      for (let i = tracers.length - 1; i >= 0; i -= 1) if (tracers[i].life <= 0) tracers.splice(i, 1);
-      for (const p of pickups) {
-        p.bob += dt * 2;
-        p.mesh.position.y = 0.7 + Math.sin(p.bob) * 0.15;
-        p.mesh.rotation.y += dt;
-      }
-      // Enemies shoot at the player when close and in the open.
-      for (const e of enemies) {
-        if (!e.alive) continue;
-        const d = Math.hypot(playerPos.x - e.x, playerPos.z - e.z);
-        e.heading = Math.atan2(playerPos.x - e.x, playerPos.z - e.z);
-        e.mesh.group.rotation.y = e.heading;
-        e.cooldown -= dt;
-        if (d < 40 && e.cooldown <= 0) {
-          e.cooldown = rng.range(0.9, 1.8);
-          const hit = rng.chance(0.4);
-          spawnTracer({ x: e.x, y: 1.3, z: e.z }, { x: playerPos.x, y: 1.2, z: playerPos.z });
-          if (hit) return { damage: 8 };
-        }
-      }
-      return null;
-    },
-    // Fire the current weapon from `from` along `dir` (unit xz). Returns the
-    // hit info or null. `targets` are {x,z,health,alive,onHit} entries.
-    shoot(weapon, from, dir, targets) {
-      const pellets = weapon.pellets || 1;
-      let best = null;
-      for (let p = 0; p < pellets; p += 1) {
-        const spread = (rng.next() - 0.5) * (weapon.pellets ? 0.22 : 0.03);
-        const dx = dir.x + -dir.z * spread;
-        const dz = dir.z + dir.x * spread;
-        const len = Math.hypot(dx, dz) || 1;
-        const ux = dx / len; const uz = dz / len;
-        for (const t of targets) {
-          if (!t.alive) continue;
-          const tx = t.x - from.x; const tz = t.z - from.z;
-          const along = tx * ux + tz * uz;
-          if (along < 0 || along > weapon.range) continue;
-          const perp = Math.abs(tx * uz - tz * ux);
-          if (perp < 1.1 && (!best || along < best.along)) best = { target: t, along, ux, uz };
-        }
-      }
-      const end = best
-        ? { x: best.target.x, y: 1.2, z: best.target.z }
-        : { x: from.x + dir.x * weapon.range, y: 1.2, z: from.z + dir.z * weapon.range };
-      spawnTracer({ x: from.x, y: 1.3, z: from.z }, end);
-      if (best) {
-        best.target.health -= weapon.damage;
-        if (best.target.health <= 0) {
-          best.target.alive = false;
-          if (best.target.onDeath) best.target.onDeath();
-        }
-        return { hit: true, target: best.target, damage: weapon.damage };
-      }
-      return { hit: false };
-    },
-    pickupAt(x, z) {
-      for (let i = 0; i < pickups.length; i += 1) {
-        const p = pickups[i];
-        if (Math.hypot(p.x - x, p.z - z) < 2.2) {
-          pickupGroup.remove(p.mesh);
-          pickups.splice(i, 1);
-          return p;
-        }
-      }
-      return null;
-    },
-  };
+export function createCombat(scene) {
+  const group = new THREE.Group();
+  scene.add(group);
+  return { group, tracers: [], flash: null, flashT: 0, cooldown: 0, hitMarkerT: 0, damageNumbers: [] };
 }
 
-export function weaponDef(id) { return WEAPONS.find((w) => w.id === id); }
+export function spawnEnemy(state, scene, x, z, kind) {
+  const e = { id: 'enemy' + state.enemies.length + '_' + Math.floor(state.time), x, z, angle: 0, health: kind === 'heavy' ? 120 : 60, kind: kind || 'goon', shootT: 1 + state.rng.next() * 2 };
+  state.enemies.push(e);
+  return e;
+}
+
+export function updateCombat(state, input, combat, dt, audio, cameraYaw) {
+  combat.cooldown -= dt;
+  combat.flashT -= dt;
+  combat.hitMarkerT -= dt;
+  if (state.flags.gunfireT > 0) state.flags.gunfireT -= dt;
+  const w = WEAPONS[state.weaponIndex];
+  const wantFire = input.mouseDown || input.keys.KeyF;
+  if (wantFire && combat.cooldown <= 0 && !state.player.inCar) {
+    if (w.id === 'fists') {
+      combat.cooldown = 1 / w.rate;
+      playPunch(audio);
+      // Punch hits the nearest enemy within reach.
+      for (const e of state.enemies) {
+        if (dist2d(state.player.x, state.player.z, e.x, e.z) < w.range) {
+          e.health -= w.damage; combat.hitMarkerT = 0.4;
+          if (e.health <= 0) killEnemy(state, e);
+          break;
+        }
+      }
+    } else {
+      if (state.ammo[state.weaponIndex] <= 0) { combat.cooldown = 0.4; state.message = 'No ammo — visit Ironworks Arms'; state.messageT = 2; return; }
+      state.ammo[state.weaponIndex]--;
+      state.stats.shotsFired++;
+      combat.cooldown = 1 / w.rate;
+      state.flags.gunfireT = 1.5;
+      playGunshot(audio);
+      combat.flashT = 0.07;
+      // Ray: nearest enemy within range and a wide aim cone.
+      const aim = cameraYaw !== undefined ? cameraYaw : state.player.angle;
+      let best = null, bestD = w.range;
+      for (const e of state.enemies) {
+        const d = dist2d(state.player.x, state.player.z, e.x, e.z);
+        const a = Math.abs(wrapAngle(angleTo(state.player.x, state.player.z, e.x, e.z) - aim));
+        if (d < bestD && a < 0.6) { bestD = d; best = e; }
+      }
+      if (best) {
+        best.health -= w.damage;
+        combat.hitMarkerT = 0.4;
+        combat.damageNumbers.push({ x: best.x, z: best.z, text: '-' + w.damage, t: 0.8 });
+        if (best.health <= 0) killEnemy(state, best);
+      }
+      // Tracer line from the player toward the aim direction.
+      const from = new THREE.Vector3(state.player.x, 1.4, state.player.z);
+      const to = new THREE.Vector3(state.player.x + Math.sin(aim) * w.range, 1.4, state.player.z + Math.cos(aim) * w.range);
+      const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0.9 }));
+      combat.group.add(line);
+      combat.tracers.push({ line, t: 0.12 });
+    }
+  }
+  for (const tr of combat.tracers) tr.t -= dt;
+  combat.tracers = combat.tracers.filter((tr) => {
+    if (tr.t <= 0) { combat.group.remove(tr.line); tr.line.geometry.dispose(); return false; }
+    return true;
+  });
+  for (const dn of combat.damageNumbers) dn.t -= dt;
+  combat.damageNumbers = combat.damageNumbers.filter((d) => d.t > 0);
+  // Enemies shoot back at the player.
+  for (const e of [...state.enemies]) {
+    e.shootT -= dt;
+    const d = dist2d(e.x, e.z, state.player.x, state.player.z);
+    if (d < 40 && e.shootT <= 0) {
+      e.shootT = 1.6 + state.rng.next();
+      state.flags.gunfireT = 1;
+      playGunshot(audio);
+      if (state.armour > 0) state.armour = Math.max(0, state.armour - 6);
+      else state.health = Math.max(0, state.health - 6);
+      if (state.health <= 0) { state.wasted = true; state.gameOver = true; }
+    }
+    // Enemies shuffle toward the player.
+    if (d > 12 && d < 60) {
+      const a = angleTo(e.x, e.z, state.player.x, state.player.z);
+      e.x += Math.sin(a) * 2.4 * dt; e.z += Math.cos(a) * 2.4 * dt; e.angle = a;
+    }
+  }
+}
+
+function killEnemy(state, e) {
+  state.enemies = state.enemies.filter((x) => x !== e);
+  state.money += 60;
+  state.pickups.push({ kind: 'cash', amount: 60, x: e.x, z: e.z, taken: false });
+  state.message = 'Enemy down — +$60'; state.messageT = 2;
+}
+
+export function switchWeapon(state, index) {
+  if (index < 0 || index >= WEAPONS.length) return;
+  if (!state.weaponsOwned[index]) { state.message = WEAPONS[index].name + ' locked — $' + WEAPONS[index].price + ' at Ironworks Arms'; state.messageT = 2; return; }
+  state.weaponIndex = index;
+}
