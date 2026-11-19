@@ -1,12 +1,29 @@
-// Story missions for Solmar Bay 3D: 12 missions for Mara, given by Rosa and
-// the crew, each with a briefing dialogue, stages, a timer where it fits,
-// a reward and a clear end state. Missions unlock in order.
+// Mara's story arc in Solmar Bay: twelve missions handed out by Rosa and
+// the crew, played in order. Each one carries its own briefing, a chain of
+// stages, a timer when the job is timed, and a payout at the end.
 import { MISSIONS, addWanted, addRespect, districtAt } from './config.js';
 import { dist2d } from './random.js';
 import { playMissionDone } from './audio.js';
 import { spawnEnemy } from './combat.js';
+import { roadblockSlots } from './police.js';
 
 export function missionDef(state) { return MISSIONS[state.missionIndex]; }
+
+// What each mission needs the moment it starts: a heat level, a countdown
+// (0 means untimed), and — for the store robbery — the two goons guarding it.
+const OPENING = {
+  1: { wanted: 2 },
+  2: { wanted: 3, timer: 45 },
+  3: { timer: 0 },
+  4: { timer: 150 },
+  5: { wanted: 4, goons: [[-250, -120], [-245, -112]] },
+  6: { wanted: 3, timer: 240 },
+  7: { timer: 0 },
+  8: { timer: 120 },
+  9: { wanted: 5 },
+  10: { wanted: 3 },
+  11: { wanted: 5 },
+};
 
 export function startMission(state, index, audio) {
   const def = MISSIONS[index];
@@ -21,19 +38,14 @@ export function startMission(state, index, audio) {
   state.missionText = def.objective;
   state.missionNext = def.next;
   state.missionProgress = 0;
-  // Per-mission setup: wanted levels, timers, targets, enemies.
-  if (index === 1) { addWanted(state, 2); state.missionTimer = 0; }
-  if (index === 2) { addWanted(state, 3); state.missionTimer = 45; }
-  if (index === 3) { state.missionTimer = 0; }
-  if (index === 4) { state.missionTimer = 150; }
-  if (index === 5) { addWanted(state, 4); spawnEnemy(state, null, -250, -120, 'goon'); spawnEnemy(state, null, -245, -112, 'goon'); }
-  if (index === 6) { addWanted(state, 3); state.missionTimer = 240; }
-  if (index === 7) { state.missionTimer = 0; }
-  if (index === 8) { state.missionTimer = 120; }
-  if (index === 9) { addWanted(state, 5); state.missionTimer = 0; }
-  if (index === 10) { addWanted(state, 3); state.missionTimer = 0; }
-  if (index === 11) { addWanted(state, 5); state.missionTimer = 0; }
-  state.message = 'Mission ' + (index + 1) + '/12 — ' + def.name; state.messageT = 3;
+  const opening = OPENING[index];
+  if (opening) {
+    if (opening.wanted) addWanted(state, opening.wanted);
+    if (opening.timer !== undefined) state.missionTimer = opening.timer;
+    if (opening.goons) for (const [gx, gz] of opening.goons) spawnEnemy(state, null, gx, gz, 'goon');
+  }
+  state.message = 'Mission ' + (index + 1) + '/12 — ' + def.name;
+  state.messageT = 3;
 }
 
 export function completeMission(state, audio) {
@@ -49,15 +61,15 @@ export function completeMission(state, audio) {
   state.missionProgress = 1;
   state.dialogue = { speaker: def.speaker, role: def.role, color: def.color, text: 'Done. $' + def.reward + ' is yours, Mara. The bay is starting to notice you.' };
   state.dialogueT = 5;
-  if (state.missionIndex === 11) { state.victory = true; }
+  if (state.missionIndex === 11) state.victory = true;
   if (audio) playMissionDone(audio);
-  // Cash pickup as a bonus at the finish spot.
+  // A little bonus cash dropped where the job ended.
   state.pickups.push({ kind: 'cash', amount: 100, x: state.player.x + 4, z: state.player.z + 4, taken: false });
 }
 
-function gotoTarget(state) {
-  // Each mission's stage targets, in order.
-  const targets = [
+// The destination for every stage of every mission, in stage order.
+function waypointsFor(index) {
+  return [
     [{ x: -168, z: 118 }, { x: -168, z: 118 }],
     [{ x: -300, z: 40 }],
     [{ x: -60, z: 200 }],
@@ -70,13 +82,13 @@ function gotoTarget(state) {
     [{ x: -330, z: 220 }],
     [{ x: -280, z: -120 }, { x: -262, z: -138 }],
     [{ x: -262, z: -138 }],
-  ];
-  return targets[state.missionIndex][Math.min(state.missionStage, targets[state.missionIndex].length - 1)];
+  ][index];
 }
 
 export function missionTarget(state) {
   if (!state.missionActive) return null;
-  return gotoTarget(state);
+  const stops = waypointsFor(state.missionIndex);
+  return stops[Math.min(state.missionStage, stops.length - 1)];
 }
 
 export function updateMissions(state, dt, audio) {
@@ -84,21 +96,29 @@ export function updateMissions(state, dt, audio) {
   if (state.messageT > 0) state.messageT -= dt;
   if (!state.missionActive) return;
   const def = MISSIONS[state.missionIndex];
-  const target = gotoTarget(state);
-  const d = dist2d(state.player.x, state.player.z, target.x, target.z);
-  state.missionProgress = Math.max(0, Math.min(1, 1 - d / 400));
-  // Mission 1: reach the garage, then take the coupe and drive back.
+  const stops = waypointsFor(state.missionIndex);
+  const target = stops[Math.min(state.missionStage, stops.length - 1)];
+  const range = dist2d(state.player.x, state.player.z, target.x, target.z);
+  state.missionProgress = Math.max(0, Math.min(1, 1 - range / 400));
+
+  // 1 — Pick up the coupe at the garage and bring it home to Rosa.
   if (state.missionIndex === 0) {
-    if (state.missionStage === 0 && d < 10) {
-      state.missionStage = 1; state.missionText = 'Take the red coupe out front'; state.missionNext = 'Drive it back to Rosa';
+    if (state.missionStage === 0 && range < 10) {
+      state.missionStage = 1;
+      state.missionText = 'Take the red coupe out front';
+      state.missionNext = 'Drive it back to Rosa';
     } else if (state.missionStage === 1 && state.player.inCar && state.player.carId === 'rosa') {
-      state.missionStage = 2; state.missionText = 'Drive the coupe back to Rosa'; state.missionNext = 'Park at the garage';
-    } else if (state.missionStage === 2 && d < 10 && state.player.inCar) {
-      completeMission(state, audio); return;
+      state.missionStage = 2;
+      state.missionText = 'Drive the coupe back to Rosa';
+      state.missionNext = 'Park at the garage';
+    } else if (state.missionStage === 2 && range < 10 && state.player.inCar) {
+      completeMission(state, audio);
+      return;
     }
     return;
   }
-  // Mission 2: lose a 2-star pursuit — out of sight for 12 seconds.
+
+  // 2 — Shake a 2-star tail: twelve seconds out of sight.
   if (state.missionIndex === 1) {
     if (!state.inSight && state.wanted > 0) state.missionTimer += dt;
     state.missionText = 'Lose the 2-star pursuit — stay unseen ' + Math.max(0, Math.ceil(12 - state.missionTimer)) + 's';
@@ -106,7 +126,8 @@ export function updateMissions(state, dt, audio) {
     if (state.missionTimer >= 12 || state.wanted === 0) { completeMission(state, audio); return; }
     return;
   }
-  // Mission 3: survive 45 seconds at 3 stars.
+
+  // 3 — Ride out 45 seconds under three stars.
   if (state.missionIndex === 2) {
     state.missionTimer -= dt;
     state.missionText = 'Survive the 3-star chase';
@@ -114,87 +135,107 @@ export function updateMissions(state, dt, audio) {
     if (state.missionTimer <= 0) { completeMission(state, audio); return; }
     return;
   }
-  // Mission 4: carry the package to Dockside.
+
+  // 4 — Carry the package over to Dockside.
   if (state.missionIndex === 3) {
-    if (d < 12) { completeMission(state, audio); return; }
+    if (range < 12) { completeMission(state, audio); return; }
     return;
   }
-  // Mission 5: night delivery through Downtown before the timer ends.
+
+  // 5 — Night run through Downtown, on the clock.
   if (state.missionIndex === 4) {
     state.missionTimer -= dt;
     state.missionText = 'Night delivery through Downtown';
-    if (d < 12) { completeMission(state, audio); return; }
+    if (range < 12) { completeMission(state, audio); return; }
     if (state.missionTimer <= 0) { failMission(state, 'The delivery went cold.'); return; }
     return;
   }
-  // Mission 6: rob the store (reach it, enemies down) then escape 4 stars.
+
+  // 6 — Hit the store, then disappear with four stars on the tail.
   if (state.missionIndex === 5) {
-    if (state.missionStage === 0 && d < 12) {
-      state.missionStage = 1; state.money += 500;
-      state.missionText = 'Grabbed the cash — now lose 4 stars'; state.missionNext = 'Stay out of sight';
+    if (state.missionStage === 0 && range < 12) {
+      state.missionStage = 1;
+      state.money += 500;
+      state.missionText = 'Grabbed the cash — now lose 4 stars';
+      state.missionNext = 'Stay out of sight';
       state.dialogue = { speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'Cash in hand. Now vanish, Mara — four stars on your tail.' };
       state.dialogueT = 5;
-    } else if (state.missionStage === 1 && state.wanted === 0) { completeMission(state, audio); return; }
+    } else if (state.missionStage === 1 && state.wanted === 0) {
+      completeMission(state, audio);
+      return;
+    }
     return;
   }
-  // Mission 7: cross four districts to the hideout.
+
+  // 7 — Cross four districts on the way to the Fairground hideout.
   if (state.missionIndex === 6) {
     state.missionTimer += dt;
     const visited = state.flags.districtsVisited || (state.flags.districtsVisited = new Set());
     visited.add(districtAt(state.player.x, state.player.z).name);
     state.missionText = 'Reach the Fairground hideout — ' + visited.size + '/4 districts crossed';
     state.missionProgress = visited.size / 4;
-    if (d < 12 && visited.size >= 4) { completeMission(state, audio); return; }
-    if (d < 12) { state.missionText = 'Hideout reached — cross more districts first!'; }
+    if (range < 12 && visited.size >= 4) { completeMission(state, audio); return; }
+    if (range < 12) state.missionText = 'Hideout reached — cross more districts first!';
     return;
   }
-  // Mission 8: race to the Fairground before the timer.
+
+  // 8 — Beat the pack to the Fairground before the clock runs out.
   if (state.missionIndex === 7) {
     state.missionTimer -= dt;
     state.missionText = 'Fairground Rush — beat the clock';
-    if (d < 12) { completeMission(state, audio); return; }
+    if (range < 12) { completeMission(state, audio); return; }
     if (state.missionTimer <= 0) { failMission(state, 'The pack beat you to the wheel.'); return; }
     return;
   }
-  // Mission 9: three timed drops.
+
+  // 9 — Three drops, in order, against the clock.
   if (state.missionIndex === 8) {
-    if (d < 12) {
+    if (range < 12) {
       state.missionStage++;
       if (state.missionStage >= 3) { completeMission(state, audio); return; }
       state.missionText = 'Drop ' + (state.missionStage + 1) + '/3 — next stop marked';
     }
     return;
   }
-  // Mission 10: five-star escape to the lighthouse.
+
+  // 10 — Five-star escape all the way to the lighthouse.
   if (state.missionIndex === 9) {
-    if (d < 14) { completeMission(state, audio); return; }
+    if (range < 14) { completeMission(state, audio); return; }
     return;
   }
-  // Mission 11: ram the causeway roadblock, then reach the Marina.
+
+  // 11 — Smash through the causeway roadblock, then reach the Marina.
   if (state.missionIndex === 10) {
-    // Keep the roadblock staged ahead of the player's heading so the ram is fair,
-    // but once it is close, leave it fixed so the player can actually hit it.
-    const a = state.player.angle;
+    // While the blockade is still far off, keep it parked ahead of the
+    // player on the player's own road, using the same road-snapped slots
+    // the police spawn uses: every car on the asphalt, all facing along
+    // the road. Once it is close, leave it where it is so the ram is fair.
+    const slots = roadblockSlots(state, 30);
     state.roadblocks.forEach((rb, i) => {
-      if (!rb.broken && dist2d(state.player.x, state.player.z, rb.x, rb.z) > 45) {
-        rb.x = state.player.x + Math.sin(a) * 30 + Math.cos(a) * (i - 1) * 7;
-        rb.z = state.player.z + Math.cos(a) * 30 - Math.sin(a) * (i - 1) * 7;
-        rb.angle = a + Math.PI / 2;
+      if (!rb.broken && slots[i] && dist2d(state.player.x, state.player.z, rb.x, rb.z) > 45) {
+        rb.x = slots[i].x;
+        rb.z = slots[i].z;
+        rb.angle = slots[i].angle;
       }
     });
     if (state.missionStage === 0 && state.flags.missionRoadblock) {
-      state.missionStage = 1; state.missionText = 'Roadblock broken — reach the Marina'; state.missionNext = 'Drive to Marina Motors';
-    } else if (state.missionStage === 1 && d < 14) { completeMission(state, audio); return; }
-    else if (state.missionStage === 0) {
+      state.missionStage = 1;
+      state.missionText = 'Roadblock broken — reach the Marina';
+      state.missionNext = 'Drive to Marina Motors';
+    } else if (state.missionStage === 1 && range < 14) {
+      completeMission(state, audio);
+      return;
+    } else if (state.missionStage === 0) {
       state.missionText = 'Ram the causeway roadblock at full speed';
-      // Keep a roadblock staged ahead of the player while wanted.
+      // Keep the heat on while the blockade still stands.
       if (state.wanted < 3) addWanted(state, 3);
     }
     return;
   }
-  // Mission 12: finale — survive 5 stars and reach the Marina.
+
+  // 12 — Finale: survive five stars and make the Marina.
   if (state.missionIndex === 11) {
-    if (d < 14) { completeMission(state, audio); return; }
+    if (range < 14) { completeMission(state, audio); return; }
     return;
   }
 }
