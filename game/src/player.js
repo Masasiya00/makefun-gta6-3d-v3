@@ -15,9 +15,14 @@ const OUTFITS = [0x2a9d8f, 0xe63946, 0x1d3557, 0xf2c14e, 0x7b2fbe];
 
 function gunMesh(kind) {
   const g = new THREE.Group();
-  const metal = new THREE.MeshLambertMaterial({ color: 0x4a4d55 });
+  // Light gunmetal so the gun reads against the green shirt and dark
+  // trousers from the chase camera; bright muzzle + yellow front sight
+  // give the barrel a visible tip even at screenshot scale.
+  const metal = new THREE.MeshLambertMaterial({ color: 0x9aa2b0 });
+  const bright = new THREE.MeshLambertMaterial({ color: 0xdde2e8 });
+  const sight = new THREE.MeshLambertMaterial({ color: 0xffc300 });
   const wood = new THREE.MeshLambertMaterial({ color: 0x9a6a32 });
-  const grip = new THREE.MeshLambertMaterial({ color: 0x111114 });
+  const grip = new THREE.MeshLambertMaterial({ color: 0x33363d });
   function part(w, h, d, m, x, y, z) {
     const p = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
     p.position.set(x, y, z);
@@ -27,23 +32,28 @@ function gunMesh(kind) {
   if (kind === 'pistol') {
     part(0.09, 0.11, 0.5, metal, 0, 0.02, 0.1); // slide
     part(0.08, 0.26, 0.12, grip, 0, -0.12, -0.08); // grip
-    part(0.05, 0.05, 0.06, metal, 0, 0.09, 0.36); // front sight
+    part(0.07, 0.09, 0.08, sight, 0, 0.09, 0.36); // front sight
+    part(0.09, 0.04, 0.06, bright, 0, 0.02, 0.37); // muzzle ring
   } else if (kind === 'smg') {
     part(0.11, 0.14, 0.72, metal, 0, 0, 0.1); // body
     part(0.07, 0.3, 0.11, grip, 0, -0.2, 0.12); // magazine
     part(0.09, 0.12, 0.2, wood, 0, 0, -0.32); // stock
-    part(0.05, 0.08, 0.16, metal, 0, 0.1, 0.42); // barrel tip
+    part(0.05, 0.08, 0.16, bright, 0, 0.1, 0.42); // barrel tip
+    part(0.06, 0.07, 0.06, sight, 0, 0.09, 0.48); // front sight
   } else if (kind === 'shotgun') {
     part(0.1, 0.1, 1.0, metal, 0, 0.02, 0.15); // barrel
     part(0.12, 0.12, 0.34, wood, 0, -0.04, 0.3); // pump
     part(0.1, 0.14, 0.3, wood, 0, 0, -0.42); // stock
     part(0.07, 0.1, 0.1, grip, 0, -0.1, -0.2); // grip
+    part(0.1, 0.05, 0.08, bright, 0, 0.02, 0.66); // muzzle ring
+    part(0.06, 0.07, 0.06, sight, 0, 0.09, 0.62); // front sight
   } else if (kind === 'rifle') {
     part(0.1, 0.12, 1.05, metal, 0, 0, 0.12); // body
     part(0.07, 0.3, 0.1, grip, 0, -0.2, 0.1); // magazine
     part(0.09, 0.1, 0.3, wood, 0, 0, -0.48); // stock
     part(0.06, 0.08, 0.22, metal, 0, 0.1, 0.2); // scope
-    part(0.05, 0.05, 0.18, metal, 0, 0.02, 0.68); // muzzle
+    part(0.05, 0.05, 0.18, bright, 0, 0.02, 0.68); // muzzle
+    part(0.06, 0.07, 0.06, sight, 0, 0.09, 0.62); // front sight
   }
   return g;
 }
@@ -65,16 +75,19 @@ export function makePlayerMesh(state) {
   const armL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.85, 0.3), shirt);
   armL.position.set(-0.58, 1.35, 0); g.add(armL);
   const armR = armL.clone(); armR.position.x = 0.58; g.add(armR);
-  // Weapon viewmodel: one mesh per gun, held in front of the right hand.
-  // Only the equipped gun is visible; fists show nothing.
+  // Weapon viewmodel: one mesh per gun, held out to the character's
+  // right side, clear of the torso and the right arm (arm outer edge
+  // x = 0.71), angled so the barrel sweeps diagonally across the chase
+  // camera's view instead of foreshortening to a dot. Scale 1.75 makes
+  // the barrel + grip read as a gun at screenshot distance, not a blob.
   const gunGroup = new THREE.Group();
-  gunGroup.position.set(0.68, 1.05, 0.8);
+  gunGroup.position.set(0.95, 1.18, 0.62);
   gunGroup.rotation.x = 0.12;
   // Angle the barrel out to the character's right: from the chase camera
   // dead behind, a straight-forward barrel foreshortens to nothing, while
-  // an angled one reads as a dark bar beside the torso.
-  gunGroup.rotation.y = 0.45;
-  gunGroup.scale.setScalar(1.35);
+  // an angled one reads as a long bar beside the torso.
+  gunGroup.rotation.y = 0.8;
+  gunGroup.scale.setScalar(1.75);
   g.add(gunGroup);
   const guns = {
     pistol: gunMesh('pistol'),
@@ -170,7 +183,7 @@ export function syncPlayerMesh(mesh, state, combat) {
   // 1.35 rad is nearly horizontal: an aiming pose, mostly foreshortened
   // from the chase camera behind.
   mesh.userData.armR.rotation.x = armed ? 1.35 : swing * 0.8;
-  mesh.userData.armR.rotation.z = armed ? -0.25 : 0;
+  mesh.userData.armR.rotation.z = armed ? -0.45 : 0;
   const gg = mesh.userData.gunGroup;
   gg.visible = armed;
   if (armed) {
@@ -184,7 +197,7 @@ export function syncPlayerMesh(mesh, state, combat) {
     // Reload animation: the gun tilts down while the magazine swaps.
     let tilt = 0.12;
     if (state.reloadT > 0) tilt = -0.55;
-    gg.position.y = 1.05 - dip;
+    gg.position.y = 1.18 - dip;
     gg.rotation.x = tilt;
     // Muzzle flash at the barrel tip while the shot is fresh, with a
     // light that kicks the camera (main.js adds shake on flashT too).
