@@ -20,14 +20,14 @@
   .bar > div { height: 100%; background: linear-gradient(90deg, #ff9f43, #ffd166); width: 0%; }
   /* Top-center: wanted */
   #wanted-box { top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
-  #hud-wanted-label { font-size: 20px; font-weight: 900; letter-spacing: 4px; color: #ffd166; }
+  #hud-wanted-label { font-size: 20px; font-weight: 900; letter-spacing: 4px; color: #ffd166; text-shadow: 0 2px 0 #000, 2px 0 0 #000, -2px 0 0 #000, 0 -2px 0 #000, 0 0 10px rgba(0,0,0,.9); }
   #hud-stars { font-size: 26px; letter-spacing: 2px; }
   .star { color: rgba(255,255,255,.28); }
   .star.on { color: #ffd166; animation: starpop .35s ease-out; }
   @keyframes starpop { 0% { transform: scale(1.8); } 100% { transform: scale(1); } }
-  #wanted-box.max #hud-wanted-label { color: #ff4d4d; animation: maxblink 1s steps(2) infinite; }
+  #wanted-box.max #hud-wanted-label { color: #ff6b6b; text-shadow: 0 2px 0 #000, 2px 0 0 #000, -2px 0 0 #000, 0 -2px 0 #000, 2px 2px 0 #000, -2px 2px 0 #000, 2px -2px 0 #000, -2px -2px 0 #000, 0 0 14px rgba(0,0,0,.95); animation: maxblink 1s steps(2) infinite; }
   #wanted-box.max .star.on { color: #ff4d4d; animation: starpulse 1s ease-in-out infinite; }
-  @keyframes maxblink { 50% { opacity: .45; } }
+  @keyframes maxblink { 50% { opacity: .8; } }
   @keyframes starpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }
   /* Top-right: money + clock + district */
   #money-box { top: 12px; right: 12px; text-align: right; }
