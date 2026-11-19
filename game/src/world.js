@@ -282,6 +282,10 @@ export function createWorld(state) {
       const bx = d.x + rng.range(-70, 70);
       const bz = d.z + rng.range(-55, 55);
       if (Math.abs(bx % 60) < 9 || Math.abs(bz % 60) < 9 || bx < WORLD.beachX + 12) continue;
+      // Keep the runway and its apron clear (airfield block) and the
+      // country road east of town clear, so no building ever spawns on
+      // the runway or across the farm road.
+      if ((bx > 165 && bx < 315 && bz > 100 && bz < 170) || (bz > 168 && bz < 192 && bx > 180 && bx < 330)) continue;
       let h = 8 + rng.range(0, 14);
       if (d.style === 'downtown') h = 22 + rng.range(0, 55);
       else if (d.style === 'docks') h = 7 + rng.range(0, 6);
@@ -374,6 +378,47 @@ export function createWorld(state) {
     }
   }
 
+  // --- Palm Beach props: umbrellas, beach chairs and towels on the sand,
+  // plus a few palms right by the beachfront road, so the coast reads as
+  // a beach even from the chase camera on the road.
+  const umbrellaColors = [0xff5d8f, 0xffc300, 0x00e5ff, 0xff2d78, 0x7ec8e3];
+  const umbrellaSpots = [[-348, 70], [-352, 88], [-344, 105], [-350, 120], [-346, 55]];
+  umbrellaSpots.forEach(([ux, uz], ui) => {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 6), mat(0xd8d8d8));
+    pole.position.set(ux, 1.3, uz);
+    group.add(pole);
+    const top = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1.0, 8), mat(umbrellaColors[ui % umbrellaColors.length]));
+    top.position.set(ux, 2.9, uz);
+    group.add(top);
+    const chair = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 0.7), mat(umbrellaColors[(ui + 2) % umbrellaColors.length]));
+    chair.position.set(ux + 2.2, 0.35, uz + 0.5);
+    chair.rotation.y = 0.5;
+    group.add(chair);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.9, 0.15), mat(umbrellaColors[(ui + 2) % umbrellaColors.length]));
+    back.position.set(ux + 1.9, 0.7, uz + 0.1);
+    back.rotation.x = -0.6;
+    back.rotation.y = 0.5;
+    group.add(back);
+    const towel = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.9), mat(umbrellaColors[(ui + 1) % umbrellaColors.length]));
+    towel.rotation.x = -Math.PI / 2;
+    towel.rotation.z = 0.4;
+    towel.position.set(ux - 1.5, 0.07, uz + 1.6);
+    group.add(towel);
+  });
+  for (const [px, pz] of [[-316, 60], [-322, 95], [-314, 130], [-355, 95], [-350, 130], [-358, 60]]) {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 7, 6), mat(0x8a6a42));
+    trunk.position.set(px, 3.5, pz);
+    group.add(trunk);
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(1.1, 4.5, 4), mat(0x2f9e44));
+      leaf.position.set(px + Math.cos(a) * 1.4, 7.2, pz + Math.sin(a) * 1.4);
+      leaf.rotation.z = -Math.cos(a) * 0.7;
+      leaf.rotation.x = Math.sin(a) * 0.7;
+      group.add(leaf);
+    }
+  }
+
   const lightGroup = new THREE.Group();
   lightGroup.position.set(-330, 4, 220);
   scene.add(lightGroup);
@@ -422,16 +467,91 @@ export function createWorld(state) {
   stadium.add(field);
   box(2, 8, 2, 0x33363d, 90, 12, -200);
 
+  // --- Countryside: crop fields, a farmhouse, a red barn, hay bales and
+  // a dirt track south-east of town, so the country road reads as rural.
+  const fieldColors = [0xd8b84a, 0x6aa84f, 0xe8c85a, 0x5a9e4a];
+  for (let i = 0; i < 4; i++) {
+    flat(46, 11, fieldColors[i], 205, 0.06, 196 + i * 12);
+    flat(46, 11, fieldColors[(i + 2) % 4], 205, 0.06, 158 + (i % 2) * 10);
+  }
+  for (let i = 0; i < 5; i++) {
+    const bale = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 1.6, 10), mat(0xd8b84a));
+    bale.rotation.z = Math.PI / 2;
+    bale.position.set(195 + i * 14, 1.1, 186);
+    group.add(bale);
+  }
+  flat(70, 5, 0xc8a878, 222, 0.06, 200);
+  // Farmhouse: cream walls, red pitched roof, chimney. On the north side
+  // of the road, so the farmstead sits in frame left of the chase camera
+  // instead of off the right edge behind the weapon HUD.
+  box(10, 6, 8, 0xf2e6c8, 218, 3, 158);
+  const farmRoof = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 4), mat(0xc0392b));
+  farmRoof.rotation.y = Math.PI / 4;
+  farmRoof.scale.set(8.5, 3.5, 7);
+  farmRoof.position.set(218, 7.7, 158);
+  group.add(farmRoof);
+  box(1, 3, 1, 0x8a6a42, 221, 8.5, 156);
+  box(2, 2.4, 0.2, 0x2a2a33, 218, 1.2, 162.1);
+  // Red barn with white trim.
+  box(9, 6, 7, 0xa93226, 200, 3, 152);
+  const barnRoof = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 4), mat(0x7b241c));
+  barnRoof.rotation.y = Math.PI / 4;
+  barnRoof.scale.set(7.5, 3, 6.2);
+  barnRoof.position.set(200, 7.5, 152);
+  group.add(barnRoof);
+  box(3, 3.4, 0.2, 0xf2f2f2, 200, 1.7, 155.6);
+  // Fence posts along the field edge.
+  for (let x = 185; x <= 260; x += 8) box(0.25, 1.1, 0.25, 0x8a6a42, x, 0.55, 190);
+  box(78, 0.15, 0.15, 0x8a6a42, 222, 0.9, 190);
+
   flat(140, 14, 0x2a2d33, 240, 0.07, 140);
+  // Runway centreline dashes + edge lights, so the strip reads as a
+  // runway from the chase camera and from the tarmac.
+  for (let x = 178; x <= 302; x += 12) flat(6, 0.8, 0xf2f2f2, x, 0.09, 140);
+  for (let x = 176; x <= 304; x += 16) {
+    box(0.5, 0.5, 0.5, 0xffe9a0, x, 0.3, 132.5);
+    box(0.5, 0.5, 0.5, 0xffe9a0, x, 0.3, 147.5);
+  }
+  // Second parked plane + control tower + windsock for the airfield.
+  const plane2 = new THREE.Group();
+  plane2.position.set(278, 2, 152);
+  plane2.rotation.y = Math.PI / 2;
+  group.add(plane2);
+  const fus2 = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 16, 8), mat(0xff8c42));
+  fus2.rotation.z = Math.PI / 2;
+  plane2.add(fus2);
+  const wing2 = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 18), mat(0xff8c42));
+  plane2.add(wing2);
+  const towerBase = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.4, 18, 8), mat(0xd8d8d8));
+  towerBase.position.set(255, 9, 158);
+  group.add(towerBase);
+  const towerCab = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 2.6, 3, 8), mat(0x9fd8f2));
+  towerCab.position.set(255, 19.5, 158);
+  group.add(towerCab);
+  const sockPole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 5, 6), mat(0x33363d));
+  sockPole.position.set(245, 2.5, 155);
+  group.add(sockPole);
+  const sock = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2.2, 8), mat(0xff5d2d));
+  sock.rotation.z = -Math.PI / 2;
+  sock.position.set(246.2, 4.8, 155);
+  group.add(sock);
   for (let i = 0; i < 3; i++) box(18, 8, 14, 0x9aa5b1, 200 + i * 26, 4, 108);
   const plane = new THREE.Group();
-  plane.position.set(240, 2, 128);
+  plane.position.set(262, 2, 140);
   group.add(plane);
   const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 16, 8), mat(0xd8d8d8));
   fuselage.rotation.z = Math.PI / 2;
   plane.add(fuselage);
   const wing = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 18), mat(0xd8d8d8));
   plane.add(wing);
+  // Tail fin + tailplane: the vertical fin is what makes the parked plane
+  // read as an airplane from the runway behind it.
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 2.2), mat(0xe63946));
+  fin.position.set(-7.5, 3.2, 0);
+  plane.add(fin);
+  const tailplane = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.3, 8), mat(0xd8d8d8));
+  tailplane.position.set(-7, 1.2, 0);
+  plane.add(tailplane);
 
   const containerColors = [0xe63946, 0x2a9d8f, 0xe9c46a, 0x264653, 0xf4a261];
   for (let i = 0; i < 18; i++) {
