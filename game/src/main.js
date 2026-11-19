@@ -67,10 +67,11 @@ for (const pk of state.pickups) {
 const $ = (id) => document.getElementById(id);
 const els = {
   money: $('hud-money'), district: $('hud-district'), clock: $('hud-clock'),
-  stars: $('hud-stars'), wantedLabel: $('hud-wanted-label'),
+  stars: $('hud-stars'), wantedLabel: $('hud-wanted-label'), wantedBox: $('wanted-box'),
   healthFill: $('health-fill'), armourFill: $('armour-fill'), healthText: $('health-text'),
   missionName: $('mission-name'), missionNext: $('mission-next'), missionTimer: $('mission-timer'), missionBar: $('mission-bar'),
-  weapons: $('weapon-slots'), weaponName: $('weapon-name'),
+  weapons: $('weapon-slots'), weaponName: $('weapon-name'), ammoSegs: $('ammo-segs'),
+  reloadPrompt: $('reload-prompt'), crosshair: $('crosshair'), hitmarker: $('hitmarker'),
   policePanel: $('police-panel'), inSight: $('in-sight'),
   respectRank: $('respect-rank'), respectText: $('respect-text'), respectFill: $('respect-fill'),
   radioStation: $('radio-station'), radioSong: $('radio-song'),
@@ -170,6 +171,7 @@ function step(dt) {
   state.clockMin += dt * 0.12;
   if (state.clockMin >= 24 * 60) { state.clockMin -= 24 * 60; state.day++; }
   if (state.flags.gunfireT === undefined) state.flags.gunfireT = 0;
+  if (state.weaponSwitchT > 0) state.weaponSwitchT -= dt;
   // Global keys.
   if (wasPressed(input, 'KeyP')) {
     if (state.started && !state.gameOver) { state.paused = !state.paused; state.shopOpen = false; }
@@ -224,7 +226,7 @@ function step(dt) {
       }
     });
   }
-  if (state.cameraShot === 'chase' || state.cameraShot === 'mission') {
+  if (state.cameraShot === 'chase' || state.cameraShot === 'mission' || state.cameraShot === 'countryside' || state.cameraShot === 'airport') {
     const road = playerRoad(state);
     const pAlong = alongOf(road, state.player.x, state.player.z);
     for (const cop of state.police) {
@@ -242,7 +244,9 @@ function step(dt) {
 
 function render() {
   syncWorld(world, state, 1 / 60);
-  syncPlayerMesh(playerMesh, state);
+  syncPlayerMesh(playerMesh, state, combat);
+  // Recoil: a fresh shot kicks the camera via the existing shake path.
+  if (combat.flashT > 0) state.shake = Math.max(state.shake, 0.3);
   syncCarMeshes(carMeshes, state);
   syncTrafficMeshes(trafficMeshes, state);
   syncPedMeshes(pedMeshes, state);
