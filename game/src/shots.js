@@ -1,133 +1,85 @@
-// Deterministic screenshot scenes (?shot=chase|city|mission|night&seed=7) and
-// the ?autoplay scripted self-test. Each scene stages the real game from a
-// fresh state and steps it forward a fixed number of steps, so the same seed
-// always gives the same frame. The autoplay drives the real missions with
-// the same autopilot the playtest uses and reports pass or fail.
-export function stageShot(name, S) {
-  const n = name || 'chase';
-  S.newGame();
-  S.unlockAll();
-  S.hud.hideScreen();
-  if (n === 'chase') {
-    // COVER: golden-hour police chase, 3 stars, helicopter visible in frame,
-    // mission tracker, police response panel, dialogue box, minimap.
-    S.setClock(17.5);
-    S.teleportPlayer(200, -200, Math.PI);
-    const car = S.spawnCar('coupe', 200, -190, Math.PI);
-    S.enterCar(car);
-    S.startMission(3);
-    S.closeDialogue();
-    S.police.setWanted(3);
-    S.stepSim(90); // let the chase form up
-    // Helicopter in the frame: ahead and above the car, big and readable.
-    const heli = S.police.heli;
-    if (heli) heli.group.position.set(196, 34, -238);
-    // Chase camera just behind the car, looking slightly up at the heli.
-    S.setCamera(200, 5.5, -176, 198, 16, -240);
-    S.hud.showDialogue({ who: 'Rosa', color: '#e06a4f', portrait: 'R', text: 'Forty-five seconds, Mara. Survive that and the bay is yours.' });
-  } else if (n === 'city') {
+// Deterministic screenshot scenes for Solmar Bay 3D.
+// ?shot=chase|city|mission|night&seed=7 stages the player, cars, camera and
+// HUD the same way every run, so screenshots are reproducible.
+import { addWanted } from './config.js';
+import { startMission } from './missions.js';
+
+export const SHOT_DEFS = [
+  { name: '1-cover.jpg', query: '?shot=chase&seed=7' },
+  { name: '2-city.jpg', query: '?shot=city&seed=7' },
+  { name: '3-mission.jpg', query: '?shot=mission&seed=7' },
+  { name: '4-night.jpg', query: '?shot=night&seed=7' },
+];
+
+export function applyShot(state, shotName, audio) {
+  state.started = true;
+  state.paused = false;
+  if (shotName === 'chase') {
+    // Golden-hour chase: 3 stars, helicopter circling, mission 3 running,
+    // dialogue from Rosa, player driving the red coupe down the boulevard.
+    state.clockMin = 18 * 60 + 32;
+    state.player.x = 0; state.player.z = -60;
+    state.player.angle = 0; state.player.inCar = true; state.player.onFoot = false; state.player.carId = 'rosa';
+    const rosa = state.cars.find((c) => c.id === 'rosa');
+    if (rosa) { rosa.x = 0; rosa.z = -60; rosa.angle = 0; rosa.speed = 34; rosa.condition = 82; }
+    state.money = 86250; state.respect = 290;
+    state.cameraYaw = 0;
+    state.cameraLookUp = true;
+    startMission(state, 2, audio);
+    state.missionTimer = 45;
+    state.dialogue = { speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'The chopper is on you, Mara — shake it and get to the hideout!' };
+    state.dialogueT = 999;
+    state.weaponsOwned = [true, true, true, false, false];
+    state.ammo = [Infinity, 72, 150, 0, 0];
+    state.weaponIndex = 2;
+    state.radio = 0;
+    state.health = 88; state.armour = 45;
+  } else if (shotName === 'city') {
     // Downtown on foot at midday, pedestrians and traffic around.
-    S.setClock(12.0);
-    S.teleportPlayer(200, -100, 0.4);
-    S.stepSim(240);
-    S.setCamera(197, 3.6, -107, 202, 1.6, -90);
-  } else if (n === 'mission') {
-    // Mission 11: the roadblock break on the causeway at dusk. startMission
-    // teleports the player to the mission start, so the scene is staged
-    // AFTER it: the car sits 20 m ahead of the camera, the roadblock
-    // ~95 m ahead, so both read clearly in frame.
-    S.setClock(17.0);
-    S.startMission(11);
-    S.closeDialogue();
-    S.teleportPlayer(700, -200, Math.PI / 2);
-    const car = S.spawnCar('coupe', 700, -190, Math.PI / 2);
-    S.enterCar(car);
-    S.police.forceRoadblock(720, -200, Math.PI / 2);
-    S.stepSim(30);
-    S.setCamera(680, 6, -180, 775, 4, -200);
-  } else if (n === 'night') {
-    // Night drive through Downtown: headlights, neon, radio strip.
-    S.setClock(22.0);
-    S.teleportPlayer(200, -200, Math.PI);
-    const car = S.spawnCar('convert', 200, -190, Math.PI);
-    S.enterCar(car);
-    S.stepSim(120);
-    S.setCamera(200, 5, -178, 200, 3, -240);
+    state.clockMin = 12 * 60 + 20;
+    state.player.x = 24; state.player.z = 6;
+    state.player.angle = Math.PI; state.player.onFoot = true; state.player.inCar = false;
+    state.cameraYaw = Math.PI;
+    state.money = 1240; state.respect = 60;
+    state.wanted = 0; state.heat = 0;
+    state.weaponsOwned = [true, true, false, false, false];
+    state.ammo = [Infinity, 36, 0, 0, 0];
+    state.dialogue = null;
+    state.health = 100; state.armour = 20;
+  } else if (shotName === 'mission') {
+    // Mission 11: the causeway roadblock, close up, player ramming it.
+    state.clockMin = 17 * 60 + 10;
+    state.player.x = -180; state.player.z = -60;
+    state.player.angle = Math.PI / 2; state.player.inCar = true; state.player.onFoot = false; state.player.carId = 'rosa';
+    const rosa = state.cars.find((c) => c.id === 'rosa');
+    if (rosa) { rosa.x = -180; rosa.z = -60; rosa.angle = Math.PI / 2; rosa.speed = 36; rosa.condition = 76; }
+    state.cameraYaw = Math.PI / 2;
+    state.money = 5400; state.respect = 640;
+    startMission(state, 10, audio);
+    state.missionStage = 0;
+    // Stage the roadblock right ahead of the player, close and visible.
+    state.roadblocks = [];
+    state.dialogue = { speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'Full speed, Mara — straight through that roadblock!' };
+    state.dialogueT = 999;
+    state.weaponsOwned = [true, true, true, true, false];
+    state.ammo = [Infinity, 48, 120, 12, 0];
+    state.weaponIndex = 1;
+    state.health = 92; state.armour = 60;
+  } else if (shotName === 'night') {
+    // Night drive through Downtown, neon and headlights on.
+    state.clockMin = 22 * 60 + 15;
+    state.player.x = 0; state.player.z = -40;
+    state.player.angle = 0; state.player.inCar = true; state.player.onFoot = false; state.player.carId = 'rosa';
+    const rosa = state.cars.find((c) => c.id === 'rosa');
+    if (rosa) { rosa.x = 0; rosa.z = -40; rosa.angle = 0; rosa.speed = 32; rosa.condition = 94; }
+    state.cameraYaw = 0;
+    state.money = 3120; state.respect = 180;
+    state.wanted = 0; state.heat = 0;
+    state.radio = 1;
+    state.dialogue = null;
+    state.weaponsOwned = [true, true, false, false, false];
+    state.ammo = [Infinity, 60, 0, 0, 0];
+    state.health = 100; state.armour = 0;
   }
-  S.hud.update(S.hudState(), 0);
-  S.render();
-  S.render();
-  window.__shotReady = true;
-  return n;
-}
-
-// --- Autoplay self-test: start, drive a mission, chase, escape, save/load. ---
-export function createAutoplay(S) {
-  const log = [];
-  let phase = 'start';
-  let wait = 0;
-  let startMoney = 0;
-  const done = { value: false, pass: false };
-
-  function note(text, ok) {
-    log.push({ step: phase, text, ok: ok !== false });
-    if (ok === false) { done.value = true; done.pass = false; }
-  }
-
-  return {
-    log,
-    get finished() { return done.value; },
-    get pass() { return done.pass; },
-    update(dt) {
-      if (done.value) return;
-      wait -= dt;
-      if (wait > 0) return;
-      // Dialogue pauses the sim: advance it first.
-      if (S.dialogueOpen) { S.advanceDialogue(); wait = 0.05; return; }
-      try {
-        if (phase === 'start') {
-          S.newGame();
-          startMoney = S.state.money;
-          if (S.state.money < 0) return note('new game money negative', false);
-          note('new game started');
-          S.startMission(1);
-          phase = 'mission1';
-        } else if (phase === 'mission1') {
-          if (!S.autopilot) S.autopilot = { target: { x: 0, z: 0 }, enterCar: true };
-          const m = S.missions.active;
-          if (!m) {
-            if (S.state.money >= startMoney + 300) note('mission 1 complete, paid $300');
-            else return note('mission 1 ended without payment', false);
-            S.startMission(2);
-            phase = 'mission2';
-          }
-        } else if (phase === 'mission2') {
-          if (!S.autopilot) S.autopilot = { target: { x: 0, z: 0 }, enterCar: true };
-          if (!S.missions.active) {
-            note('mission 2 escape complete');
-            phase = 'save';
-          }
-        } else if (phase === 'save') {
-          S.save();
-          const before = S.state.money;
-          S.state.money = 0;
-          S.loadSave();
-          if (S.state.money === before) note('save and load round-trip OK');
-          else return note('save/load mismatch', false);
-          S.audio.nextStation();
-          note('radio station switched to ' + S.audio.station().name);
-          S.pauseGame(true);
-          S.pauseGame(false);
-          note('pause and resume OK');
-          phase = 'done';
-        } else if (phase === 'done') {
-          done.value = true; done.pass = true;
-          note('autoplay PASS');
-        }
-      } catch (e) {
-        note('exception: ' + (e && e.message), false);
-      }
-      wait = 0.05;
-    },
-  };
+  state.cameraShot = shotName;
 }
