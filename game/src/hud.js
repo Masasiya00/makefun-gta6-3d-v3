@@ -1,5 +1,14 @@
 // Solmar Bay 3D — HUD: readouts, dialogue, shop menu, minimap.
-// Fresh rewrite for the Fix Round 1 visual pass (detailed minimap).
+//
+// Weapon HUD is GTA-style: a weapon band of five slots, each with a white
+// silhouette of the gun, the name and the ammo as magazine / reserve
+// (magazine in white, reserve in grey). Under the active weapon a row of
+// ammo segments shows the magazine bullet by bullet — green on a fresh
+// magazine, red and blinking when it runs low — plus a RELOADING prompt.
+// The wanted stars pop when a star is gained; at five stars they turn red
+// and pulse with a MAXIMUM RESPONSE label. On foot with a gun out, a
+// crosshair sits at screen centre and kicks on recoil, with a hitmarker
+// on every hit.
 import { WEAPONS, RESPECT_RANKS, RADIO_STATIONS, districtAt, formatClock, timeOfDay } from './config.js';
 import { policePanelRows } from './police.js';
 import { missionTarget } from './missions.js';
@@ -13,16 +22,41 @@ export function portraitHtml(speaker, color) {
   return '<div class="portrait" style="background:' + color + '"><div class="p-face"></div><div class="p-hair"></div><div class="p-eyes"><span></span><span></span></div><div class="p-smile"></div><div class="p-initial">' + speaker.charAt(0) + '</div></div>';
 }
 
+// White weapon silhouettes for the weapon band, one per gun.
+const WEAPON_ICONS = {
+  fists: '<svg viewBox="0 0 24 12"><rect x="2" y="3" width="9" height="7" rx="2"/><rect x="13" y="3" width="9" height="7" rx="2"/></svg>',
+  pistol: '<svg viewBox="0 0 24 12"><path d="M2 2h15v3H9v5H6V5H2z"/></svg>',
+  smg: '<svg viewBox="0 0 24 12"><path d="M1 3h19v3h-9l-1 4H8l1-4H1z"/></svg>',
+  shotgun: '<svg viewBox="0 0 24 12"><path d="M1 4h21v2h-12v3H8V6H1z"/></svg>',
+  rifle: '<svg viewBox="0 0 24 12"><path d="M1 4h21v2h-8v2h-2V6h-3v3H7V6H1z"/></svg>',
+};
+
+function ammoHtml(state, i) {
+  const w = WEAPONS[i];
+  if (!state.weaponsOwned[i]) return '$' + w.price;
+  if (w.mag === Infinity) return '∞';
+  const mag = state.magAmmo[i];
+  const reserve = state.ammo[i];
+  const low = mag <= Math.max(1, Math.floor(w.mag * 0.25));
+  return '<b class="mag' + (low ? ' low' : '') + '">' + mag + '</b> / <span class="reserve">' + reserve + '</span>';
+}
+
 export function updateHud(state, els, combat) {
   const d = districtAt(state.player.x, state.player.z);
   els.money.textContent = moneyStr(state.money);
   els.district.textContent = d.name;
   els.clock.textContent = formatClock(state.clockMin) + ' · DAY ' + state.day;
 
-  let stars = '';
-  for (let i = 0; i < 5; i++) stars += '<span class="star' + (i < state.wanted ? ' on' : '') + '">★</span>';
-  els.stars.innerHTML = stars;
-  els.wantedLabel.textContent = state.wanted > 0 ? 'WANTED' : '';
+  // Wanted stars: rebuild only when the level changes, so the pop
+  // animation plays once per gained star instead of every frame.
+  if (els._starsWanted !== state.wanted) {
+    let stars = '';
+    for (let i = 0; i < 5; i++) stars += '<span class="star' + (i < state.wanted ? ' on' : '') + '">' + (i < state.wanted ? '★' : '☆') + '</span>';
+    els.stars.innerHTML = stars;
+    els._starsWanted = state.wanted;
+  }
+  if (els.wantedBox) els.wantedBox.classList.toggle('max', state.wanted >= 5);
+  els.wantedLabel.textContent = state.wanted >= 5 ? 'WANTED — MAXIMUM RESPONSE' : state.wanted > 0 ? 'WANTED' : '';
 
   els.healthFill.style.width = state.health + '%';
   els.armourFill.style.width = state.armour + '%';
@@ -33,15 +67,55 @@ export function updateHud(state, els, combat) {
   els.missionTimer.textContent = state.missionActive && state.missionTimer > 0 && state.missionIndex !== 1 ? '⏱ ' + Math.ceil(state.missionTimer) + 's' : '';
   els.missionBar.style.width = Math.round((state.missionActive ? state.missionProgress : 0) * 100) + '%';
 
+  // Weapon band: silhouette + name + mag / reserve per slot.
   let slots = '';
   for (let i = 0; i < 5; i++) {
     const w = WEAPONS[i];
     const owned = state.weaponsOwned[i];
-    const ammo = owned ? (w.ammo === Infinity ? '∞' : state.ammo[i]) : '$' + w.price;
-    slots += '<div class="wslot' + (i === state.weaponIndex ? ' active' : '') + (owned ? '' : ' locked') + '"><b>' + (i + 1) + '</b><span>' + w.name + '</span><em>' + ammo + '</em></div>';
+    slots += '<div class="wslot' + (i === state.weaponIndex ? ' active' : '') + (owned ? '' : ' locked') + '"><b>' + (i + 1) + '</b><span class="wicon">' + WEAPON_ICONS[w.id] + '</span><span>' + w.name + '</span><em>' + ammoHtml(state, i) + '</em></div>';
   }
   els.weapons.innerHTML = slots;
-  els.weaponName.textContent = WEAPONS[state.weaponIndex].name + (WEAPONS[state.weaponIndex].ammo === Infinity ? '' : ' · ' + state.ammo[state.weaponIndex] + ' ammo');
+  const cw = WEAPONS[state.weaponIndex];
+  if (cw.mag === Infinity) {
+    els.weaponName.textContent = cw.name;
+  } else {
+    const low = state.magAmmo[state.weaponIndex] <= Math.max(1, Math.floor(cw.mag * 0.25));
+    els.weaponName.innerHTML = cw.name + ' · <b class="mag' + (low ? ' low' : '') + '">' + state.magAmmo[state.weaponIndex] + '</b> / <span class="reserve">' + state.ammo[state.weaponIndex] + '</span>';
+  }
+  // Ammo segments: one per bullet in the magazine.
+  if (els.ammoSegs) {
+    if (cw.mag === Infinity) {
+      els.ammoSegs.innerHTML = '';
+    } else {
+      const low = state.magAmmo[state.weaponIndex] <= Math.max(1, Math.floor(cw.mag * 0.25));
+      let segs = '';
+      for (let i = 0; i < cw.mag; i++) {
+        segs += '<span class="seg' + (i < state.magAmmo[state.weaponIndex] ? ' on' : '') + (low ? ' low' : '') + '"></span>';
+      }
+      els.ammoSegs.innerHTML = segs;
+    }
+  }
+  // Reload prompt.
+  if (els.reloadPrompt) {
+    if (state.reloadT > 0) {
+      els.reloadPrompt.style.display = 'block';
+      els.reloadPrompt.textContent = '⟳ RELOADING ' + cw.name + '…';
+    } else if (cw.mag !== Infinity && state.magAmmo[state.weaponIndex] <= 0 && state.ammo[state.weaponIndex] <= 0) {
+      els.reloadPrompt.style.display = 'block';
+      els.reloadPrompt.textContent = 'MAG EMPTY — NO RESERVE AMMO';
+    } else {
+      els.reloadPrompt.style.display = 'none';
+    }
+  }
+  // Crosshair (on foot, gun out) kicks on recoil; hitmarker on every hit.
+  if (els.crosshair) {
+    const show = state.started && !state.paused && !state.gameOver && state.player.onFoot && state.weaponIndex > 0;
+    els.crosshair.style.display = show ? 'block' : 'none';
+    if (show) els.crosshair.classList.toggle('kick', !!(combat && combat.flashT > 0));
+  }
+  if (els.hitmarker) {
+    els.hitmarker.style.display = combat && combat.hitMarkerT > 0 ? 'block' : 'none';
+  }
 
   const rows = policePanelRows(state);
   els.policePanel.style.display = state.wanted > 0 ? 'block' : 'none';
@@ -51,6 +125,7 @@ export function updateHud(state, els, combat) {
       html += '<div class="pp-row"><span class="pp-call">' + r.callsign + '</span><span class="pp-dist">' + r.dist + ' m</span><span class="pp-state ' + r.state.toLowerCase() + '">' + r.state + '</span></div>';
     }
     if (state.roadblocks.length > 0) html += '<div class="pp-note">+ roadblocks on the boulevard</div>';
+    if (state.roadblocks.length > 3) html += '<div class="pp-note">+ second roadblock line — maximum response</div>';
     els.policePanel.innerHTML = html;
   }
 
