@@ -97,6 +97,11 @@ function stageShotTraffic(state) {
 export function applyShot(state, shotName, audio) {
   state.started = true;
   state.paused = false;
+  // r6c: restage flags — reset every shot so a staged heli / flying plane
+  // never leaks into another shot.
+  state.shotNoHeli = false;
+  state.shotForceHeli = false;
+  state.flyPlane = null;
   const rosa = state.cars.find((c) => c.id === 'rosa');
   if (shotName === 'chase') {
     state.clockMin = 18 * 60 + 32;
@@ -145,6 +150,9 @@ export function applyShot(state, shotName, audio) {
     state.heat = 100;
     state.heliDist = 24;
     state.heliAlt = 16;
+    // r6c (user order 23:04 WIB): no helicopter over the beach — five
+    // stars and the chase stay, the heli and its spotlight go.
+    state.shotNoHeli = true;
     state.dialogue = { speaker: 'Rosa', role: 'GARAGE OWNER', color: '#ff9f43', text: 'Five stars on Palm Beach, Mara — lose them on the coast road!' };
     state.dialogueT = 999;
     state.weaponsOwned = [true, true, true, true, true];
@@ -200,8 +208,15 @@ export function applyShot(state, shotName, audio) {
     state.cameraLookUp = false;
     state.wanted = 1;
     state.heat = 20;
-    state.heliDist = 26;
-    state.heliAlt = 22;
+    // r6c (user order 23:04 WIB): a helicopter hovers right over the red
+    // car with its spotlight on it — forced on at 1 star. Frozen orbit
+    // parks it ahead = dist * 1.1, 5 m to the side, at alt - 7: with
+    // dist 16 / alt 12 the body sits ~55-70% up the frame, fully inside
+    // (v1 at 10/15 was cropped by the top edge and covered the WANTED
+    // label). Cone + pool still land on the car.
+    state.shotForceHeli = true;
+    state.heliDist = 16;
+    state.heliAlt = 12;
     state.dialogue = { speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'Country roads, Mara — the farm run pays if you keep it smooth.' };
     state.dialogueT = 999;
     state.weaponsOwned = [true, true, true, true, false];
@@ -230,6 +245,16 @@ export function applyShot(state, shotName, audio) {
     state.heat = 100;
     state.heliDist = 24;
     state.heliAlt = 14;
+    // r6c (user order 23:04 WIB): no helicopter over the runway.
+    state.shotNoHeli = true;
+    // r6c (user order 23:07 WIB): a plane on final approach over the
+    // runway, gear down, nose toward the camera — it reads as a landing,
+    // not a parked plane. Parked plane (262,140) stays. Camera sits at
+    // (212.5, 4.4, 140) looking +x, pitched down ~16 deg, vertical FOV
+    // 62 deg: at (268, 9, 128) the plane sits ~67% up the frame, left
+    // of centre, clear of the parked plane, the tower and the IN SIGHT
+    // pill (v1 at 275/11 was higher and tucked under the pill).
+    state.flyPlane = { x: 268, y: 9, z: 128, angle: Math.PI };
     state.dialogue = { speaker: 'Lupe', role: 'CREW LEAD', color: '#e8416f', text: 'Five stars on the runway, Mara — the whole bay is watching!' };
     state.dialogueT = 999;
     state.weaponsOwned = [true, true, true, true, true];
