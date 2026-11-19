@@ -110,7 +110,7 @@ export function makePlayerMesh(state) {
   const flashLight = new THREE.PointLight(0xffc860, 0, 9);
   flashGroup.add(flashLight);
   gunGroup.add(flashGroup);
-  g.userData = { legL, legR, armL, armR, torso, shirt, gunGroup, guns, flashGroup, flashLight };
+  g.userData = { legL, legR, armL, armR, torso, shirt, cap, gunGroup, guns, flashGroup, flashLight };
   return g;
 }
 
@@ -173,7 +173,15 @@ export function syncPlayerMesh(mesh, state, combat) {
   mesh.userData.legL.rotation.x = swing;
   mesh.userData.legR.rotation.x = -swing;
   mesh.userData.armL.rotation.x = -swing * 0.8;
-  mesh.userData.shirt.color.setHex(OUTFITS[state.outfit % OUTFITS.length]);
+  // r6e city shot: white tank top, no cap — the CJ look from the
+  // reference. Everywhere else the outfit colour is unchanged.
+  if (state.shotTankTop) {
+    mesh.userData.shirt.color.setHex(0xf2f2f2);
+    mesh.userData.cap.visible = false;
+  } else {
+    mesh.userData.shirt.color.setHex(OUTFITS[state.outfit % OUTFITS.length]);
+    mesh.userData.cap.visible = true;
+  }
   // Weapon viewmodel: show the equipped gun, hide the rest. While armed
   // the right arm points forward along the gun instead of swinging.
   const gunId = GUN_BY_INDEX[state.weaponIndex];
