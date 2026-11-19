@@ -23,7 +23,12 @@
   #hud-wanted-label { font-size: 20px; font-weight: 900; letter-spacing: 4px; color: #ffd166; }
   #hud-stars { font-size: 26px; letter-spacing: 2px; }
   .star { color: rgba(255,255,255,.28); }
-  .star.on { color: #ffd166; }
+  .star.on { color: #ffd166; animation: starpop .35s ease-out; }
+  @keyframes starpop { 0% { transform: scale(1.8); } 100% { transform: scale(1); } }
+  #wanted-box.max #hud-wanted-label { color: #ff4d4d; animation: maxblink 1s steps(2) infinite; }
+  #wanted-box.max .star.on { color: #ff4d4d; animation: starpulse 1s ease-in-out infinite; }
+  @keyframes maxblink { 50% { opacity: .45; } }
+  @keyframes starpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }
   /* Top-right: money + clock + district */
   #money-box { top: 12px; right: 12px; text-align: right; }
   #hud-money { font-size: 30px; font-weight: 900; color: #7dff9a; }
@@ -46,15 +51,43 @@
   #in-sight { top: 12px; left: 50%; transform: translateX(-50%); margin-top: 64px; font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 12px; display: none; width: max-content; }
   #in-sight.seen { background: #c0392b; }
   #in-sight.hidden { background: #1e8449; }
-  /* Weapon slots, right side */
+  /* Weapon band, right side */
   #weapon-box { top: 150px; right: 12px; text-align: right; }
-  .wslot { display: inline-block; width: 74px; background: rgba(8,12,24,.72); border: 1px solid rgba(255,255,255,.16); border-radius: 6px; padding: 5px 6px; margin-left: 5px; text-align: center; }
+  .wslot { display: inline-block; width: 78px; background: rgba(8,12,24,.72); border: 1px solid rgba(255,255,255,.16); border-radius: 6px; padding: 5px 6px; margin-left: 5px; text-align: center; }
   .wslot.active { border-color: #ffd166; box-shadow: 0 0 0 2px rgba(255,209,102,.5); }
   .wslot.locked { opacity: .55; }
   .wslot b { display: block; font-size: 10px; color: #9fb8d8; }
+  .wslot .wicon { display: block; height: 18px; }
+  .wslot .wicon svg { width: 34px; height: 16px; fill: #fff; }
   .wslot span { display: block; font-size: 12px; font-weight: 800; }
   .wslot em { display: block; font-size: 11px; color: #ffd166; font-style: normal; }
-  #weapon-name { font-size: 13px; font-weight: 800; color: #ffd166; margin-top: 5px; }
+  .mag { color: #fff; font-weight: 900; }
+  .mag.low { color: #ff4d4d; animation: maxblink .7s steps(2) infinite; }
+  .reserve { color: #9fb8d8; }
+  #weapon-name { font-size: 14px; font-weight: 800; color: #ffd166; margin-top: 5px; }
+  #weapon-name .mag { font-size: 18px; }
+  #ammo-segs { margin-top: 4px; text-align: right; }
+  .seg { display: inline-block; width: 6px; height: 11px; margin-left: 2px; background: rgba(255,255,255,.18); border-radius: 1px; }
+  .seg.on { background: #7dff9a; }
+  .seg.on.low { background: #ff4d4d; animation: maxblink .7s steps(2) infinite; }
+  /* Crosshair + hitmarker, screen centre (on foot, gun out) */
+  #crosshair { top: 50%; left: 50%; width: 0; height: 0; display: none; }
+  #crosshair i { position: absolute; background: #fff; box-shadow: 0 0 3px rgba(0,0,0,.9); }
+  #crosshair .ch-t { left: -1px; top: -14px; width: 2px; height: 9px; }
+  #crosshair .ch-b { left: -1px; top: 5px; width: 2px; height: 9px; }
+  #crosshair .ch-l { left: -14px; top: -1px; width: 9px; height: 2px; }
+  #crosshair .ch-r { left: 5px; top: -1px; width: 9px; height: 2px; }
+  #crosshair .ch-dot { left: -1.5px; top: -1.5px; width: 3px; height: 3px; border-radius: 50%; }
+  #crosshair.kick i { transform: scale(1); }
+  #crosshair.kick .ch-t { top: -19px; }
+  #crosshair.kick .ch-b { top: 10px; }
+  #crosshair.kick .ch-l { left: -19px; }
+  #crosshair.kick .ch-r { left: 10px; }
+  #hitmarker { top: 50%; left: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; display: none; }
+  #hitmarker::before, #hitmarker::after { content: ''; position: absolute; left: 12px; top: 0; width: 3px; height: 26px; background: #ff4d4d; box-shadow: 0 0 4px rgba(0,0,0,.9); }
+  #hitmarker::before { transform: rotate(45deg); }
+  #hitmarker::after { transform: rotate(-45deg); }
+  #reload-prompt { bottom: 190px; left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 900; letter-spacing: 1px; color: #ffd166; background: rgba(8,12,24,.8); padding: 6px 14px; border-radius: 6px; display: none; }
   /* Minimap, bottom-left */
   #minimap-wrap { bottom: 12px; left: 12px; width: 190px; }
   #minimap { width: 180px; height: 180px; border-radius: 50%; border: 3px solid rgba(255,255,255,.75); background: #223322; display: block; }
@@ -149,7 +182,12 @@
 <div class="hud" id="weapon-box">
   <div id="weapon-slots"></div>
   <div id="weapon-name">FISTS</div>
+  <div id="ammo-segs"></div>
 </div>
+
+<div class="hud" id="crosshair"><i class="ch-t"></i><i class="ch-b"></i><i class="ch-l"></i><i class="ch-r"></i><i class="ch-dot"></i></div>
+<div class="hud" id="hitmarker"></div>
+<div class="hud" id="reload-prompt"></div>
 
 <div class="hud" id="minimap-wrap">
   <canvas id="minimap" width="180" height="180"></canvas>
