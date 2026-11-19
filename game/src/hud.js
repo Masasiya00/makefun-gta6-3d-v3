@@ -1,17 +1,16 @@
-// HUD and minimap for Solmar Bay 3D: money, stars, mission tracker, police
-// response panel, weapon slots, respect meter, radio strip, vehicle panel,
-// dialogue box with portrait, and the circular minimap.
+// Solmar Bay 3D — HUD: readouts, dialogue, shop menu, minimap.
+// Fresh rewrite for the Fix Round 1 visual pass (detailed minimap).
 import { WEAPONS, RESPECT_RANKS, RADIO_STATIONS, districtAt, formatClock, timeOfDay } from './config.js';
 import { policePanelRows } from './police.js';
 import { missionTarget } from './missions.js';
 import { shopItems } from './shops.js';
 
-export function moneyStr(n) { return '$' + Math.floor(n).toLocaleString('en-US'); }
+export function moneyStr(n) {
+  return '$' + Math.floor(n).toLocaleString('en-US');
+}
 
 export function portraitHtml(speaker, color) {
-  // A simple CSS-drawn portrait: face, hair, shoulders — no image files.
-  const initial = (speaker || '?')[0];
-  return '<div class="portrait" style="background:' + color + '"><div class="p-face"><div class="p-hair"></div><div class="p-eyes"><span></span><span></span></div><div class="p-smile"></div></div><div class="p-initial">' + initial + '</div></div>';
+  return '<div class="portrait" style="background:' + color + '"><div class="p-face"></div><div class="p-hair"></div><div class="p-eyes"><span></span><span></span></div><div class="p-smile"></div><div class="p-initial">' + speaker.charAt(0) + '</div></div>';
 }
 
 export function updateHud(state, els, combat) {
@@ -19,24 +18,21 @@ export function updateHud(state, els, combat) {
   els.money.textContent = moneyStr(state.money);
   els.district.textContent = d.name;
   els.clock.textContent = formatClock(state.clockMin) + ' · DAY ' + state.day;
-  // Wanted stars.
+
   let stars = '';
   for (let i = 0; i < 5; i++) stars += '<span class="star' + (i < state.wanted ? ' on' : '') + '">★</span>';
   els.stars.innerHTML = stars;
   els.wantedLabel.textContent = state.wanted > 0 ? 'WANTED' : '';
-  // Health / armour.
+
   els.healthFill.style.width = state.health + '%';
   els.armourFill.style.width = state.armour + '%';
   els.healthText.textContent = Math.round(state.health);
-  // Mission tracker.
-  els.missionName.textContent = state.missionActive
-    ? 'JOB ' + (state.missionIndex + 1) + '/12 · ' + state.missionText
-    : (state.missionDone.length >= 12 ? 'ALL MISSIONS COMPLETE' : 'FREE ROAM — press M for mission ' + (state.missionIndex + 1));
+
+  els.missionName.textContent = state.missionActive ? 'JOB ' + (state.missionIndex + 1) + '/12 · ' + state.missionText : (state.missionDone.length >= 12 ? 'ALL MISSIONS COMPLETE' : 'FREE ROAM — press M for mission ' + (state.missionIndex + 1));
   els.missionNext.textContent = 'NEXT ▸ ' + (state.missionNext || 'Explore Solmar Bay');
-  els.missionTimer.textContent = state.missionActive && state.missionTimer > 0 && state.missionIndex !== 1
-    ? '⏱ ' + Math.ceil(state.missionTimer) + 's' : '';
+  els.missionTimer.textContent = state.missionActive && state.missionTimer > 0 && state.missionIndex !== 1 ? '⏱ ' + Math.ceil(state.missionTimer) + 's' : '';
   els.missionBar.style.width = Math.round((state.missionActive ? state.missionProgress : 0) * 100) + '%';
-  // Weapon slots.
+
   let slots = '';
   for (let i = 0; i < 5; i++) {
     const w = WEAPONS[i];
@@ -46,7 +42,7 @@ export function updateHud(state, els, combat) {
   }
   els.weapons.innerHTML = slots;
   els.weaponName.textContent = WEAPONS[state.weaponIndex].name + (WEAPONS[state.weaponIndex].ammo === Infinity ? '' : ' · ' + state.ammo[state.weaponIndex] + ' ammo');
-  // Police response panel.
+
   const rows = policePanelRows(state);
   els.policePanel.style.display = state.wanted > 0 ? 'block' : 'none';
   if (state.wanted > 0) {
@@ -57,21 +53,21 @@ export function updateHud(state, els, combat) {
     if (state.roadblocks.length > 0) html += '<div class="pp-note">+ roadblocks on the boulevard</div>';
     els.policePanel.innerHTML = html;
   }
-  // IN SIGHT indicator.
+
   els.inSight.style.display = state.wanted > 0 ? 'block' : 'none';
   els.inSight.className = 'hud insight' + (state.inSight ? ' seen' : ' hidden');
   els.inSight.textContent = state.inSight ? '◉ IN SIGHT — break line of sight' : '○ HIDDEN — stay out of sight';
-  // Respect.
+
   const rank = RESPECT_RANKS[state.respectRank];
   const next = RESPECT_RANKS[state.respectRank + 1];
   els.respectRank.textContent = rank.name;
   els.respectText.textContent = state.respect + (next ? ' / ' + next.need : ' MAX');
   els.respectFill.style.width = next ? Math.min(100, (state.respect / next.need) * 100) + '%' : '100%';
-  // Radio.
+
   const st = RADIO_STATIONS[state.radio];
   els.radioStation.textContent = '♪ ' + st.name;
   els.radioSong.textContent = st.song;
-  // Vehicle panel.
+
   const car = state.cars.find((c) => c.id === state.player.carId);
   els.vehiclePanel.style.display = state.player.inCar && car ? 'block' : 'none';
   if (car) {
@@ -81,19 +77,20 @@ export function updateHud(state, els, combat) {
     els.vehicleCond.style.width = car.condition + '%';
     els.vehicleCondText.textContent = Math.round(car.condition) + '%';
   }
-  // On-foot hint.
+
   els.onFootPanel.style.display = !state.player.inCar ? 'block' : 'none';
   els.onFootPanel.textContent = state.player.onFoot ? 'ON FOOT · E near a car to drive · F interact' : '';
-  // Dialogue.
+
   if (state.dialogue && state.dialogueT > 0) {
     els.dialogue.style.display = 'flex';
-    els.dialogue.innerHTML = portraitHtml(state.dialogue.speaker, state.dialogue.color)
-      + '<div class="dlg-body"><div class="dlg-name">' + state.dialogue.speaker + ' <span>' + state.dialogue.role + ' · ' + RESPECT_RANKS[state.respectRank].name + '</span></div><div class="dlg-text">' + state.dialogue.text + '</div></div>';
-  } else els.dialogue.style.display = 'none';
-  // Message toast.
+    els.dialogue.innerHTML = portraitHtml(state.dialogue.speaker, state.dialogue.color) + '<div class="dlg-body"><div class="dlg-name">' + state.dialogue.speaker + ' <span>' + state.dialogue.role + ' · ' + RESPECT_RANKS[state.respectRank].name + '</span></div><div class="dlg-text">' + state.dialogue.text + '</div></div>';
+  } else {
+    els.dialogue.style.display = 'none';
+  }
+
   els.toast.style.display = state.messageT > 0 ? 'block' : 'none';
   els.toast.textContent = state.message;
-  // Shop prompt + menu.
+
   els.shopPrompt.style.display = state.shopNear && !state.shopOpen ? 'block' : 'none';
   if (state.shopNear) els.shopPrompt.textContent = 'F — ' + state.shopNear.name + ' · ' + state.shopNear.blurb;
   if (state.shopOpen && state.shopNear) {
@@ -104,88 +101,161 @@ export function updateHud(state, els, combat) {
     }
     html += '<div class="shop-hint">Click an item to buy · F or Esc to close</div>';
     els.shopMenu.innerHTML = html;
-  } else els.shopMenu.style.display = 'none';
-  // Screens.
+  } else {
+    els.shopMenu.style.display = 'none';
+  }
+
   els.titleScreen.style.display = !state.started ? 'flex' : 'none';
   els.pauseScreen.style.display = state.started && state.paused && !state.gameOver ? 'flex' : 'none';
   els.endScreen.style.display = state.gameOver ? 'flex' : 'none';
   if (state.gameOver) {
     els.endTitle.textContent = state.victory ? 'KING OF THE BAY' : state.busted ? 'BUSTED' : 'WASTED';
-    els.endText.textContent = state.victory
-      ? 'Mara owns the bay. All 12 missions complete — $' + Math.floor(state.money) + ' in the pocket.'
-      : (state.busted ? 'The SBPD caught you on foot.' : 'Mara went down.') + ' You lost $' + Math.floor(state.money * 0.1) + '. Press R to retry.';
+    els.endText.textContent = state.victory ? 'Mara owns the bay. All 12 missions complete — $' + Math.floor(state.money) + ' in the pocket.' : (state.busted ? 'The SBPD caught you on foot.' : 'Mara went down.') + ' You lost $' + Math.floor(state.money * 0.1) + '. Press R to retry.';
   }
   els.timeLabel.textContent = timeOfDay(state) === 'golden' ? 'GOLDEN HOUR' : timeOfDay(state) === 'night' ? 'NIGHT' : 'DAYTIME';
 }
 
 export function drawMinimap(state, canvas) {
   const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  const cx = W / 2, cy = H / 2, scale = W / 760;
-  ctx.clearRect(0, 0, W, H);
-  // Land base.
+  const W = canvas.width;
+  const H = canvas.height;
+  const cx = W / 2;
+  const cy = H / 2;
+  const scale = W / 760;
+  const px = state.player.x;
+  const pz = state.player.z;
+  const sx = (wx) => cx + (wx - px) * scale;
+  const sy = (wz) => cy + (wz - pz) * scale;
+
+  // 1. Land base.
   ctx.fillStyle = '#3a4a3a';
   ctx.fillRect(0, 0, W, H);
-  // Sea to the west of the beach line.
-  const beachSx = cx + (WORLD_BEACH - state.player.x) * scale;
-  ctx.fillStyle = '#1e7fa8';
-  if (beachSx > 0) ctx.fillRect(0, 0, Math.min(W, beachSx), H);
+  // 2. Sea (west of the beach).
+  const beachSx = cx + (WORLD_BEACH - px) * scale;
+  if (beachSx > 0) {
+    ctx.fillStyle = '#1e7fa8';
+    ctx.fillRect(0, 0, Math.min(W, beachSx), H);
+  }
+  // 3. Sand strip.
+  if (beachSx - 16 < W && beachSx > 0) {
+    ctx.fillStyle = '#c8b078';
+    ctx.fillRect(beachSx - 16, 0, 16, H);
+  }
+  // 4. Clip to the circle.
   ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, W / 2 - 4, 0, Math.PI * 2); ctx.clip();
-  // Roads.
-  ctx.strokeStyle = '#5a6068'; ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, W / 2 - 4, 0, Math.PI * 2);
+  ctx.clip();
+  // 5. Buildings as coloured blocks.
+  const blds = state.buildings || [];
+  ctx.globalAlpha = 0.9;
+  for (const b of blds) {
+    ctx.fillStyle = '#' + b.color.toString(16).padStart(6, '0');
+    ctx.fillRect(sx(b.x) - (b.w * scale) / 2, sy(b.z) - (b.d * scale) / 2, Math.max(2, b.w * scale), Math.max(2, b.d * scale));
+  }
+  ctx.globalAlpha = 1;
+  // 6. Roads: dark casing, asphalt, centre dashes, crosswalk bars.
+  ctx.lineCap = 'butt';
   for (let x = -300; x <= 300; x += 60) {
-    const sx = cx + (x - state.player.x) * scale;
-    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
+    const X = sx(x);
+    ctx.strokeStyle = '#20242a';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(X, 0); ctx.lineTo(X, H); ctx.stroke();
+    ctx.strokeStyle = '#4a5058';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(X, 0); ctx.lineTo(X, H); ctx.stroke();
+    ctx.strokeStyle = '#d8d8a8';
+    ctx.lineWidth = 1;
+    for (let z = -260; z <= 260; z += 12) {
+      ctx.beginPath(); ctx.moveTo(X, sy(z)); ctx.lineTo(X, sy(z + 5)); ctx.stroke();
+    }
   }
   for (let z = -240; z <= 240; z += 60) {
-    const sy = cy + (z - state.player.z) * scale;
-    ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
+    const Y = sy(z);
+    ctx.strokeStyle = '#20242a';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(0, Y); ctx.lineTo(W, Y); ctx.stroke();
+    ctx.strokeStyle = '#4a5058';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, Y); ctx.lineTo(W, Y); ctx.stroke();
+    ctx.strokeStyle = '#d8d8a8';
+    ctx.lineWidth = 1;
+    for (let x = -360; x <= 360; x += 12) {
+      ctx.beginPath(); ctx.moveTo(sx(x), Y); ctx.lineTo(sx(x + 5), Y); ctx.stroke();
+    }
   }
-  // Search zone circle.
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  for (const ix of [-240, -120, 0, 120, 240]) {
+    for (const iz of [-240, -120, 0, 120, 240]) {
+      const half = (10 * scale) / 2;
+      ctx.beginPath(); ctx.moveTo(sx(ix + 6), sy(iz) - half); ctx.lineTo(sx(ix + 6), sy(iz) + half); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx(ix - 6), sy(iz) - half); ctx.lineTo(sx(ix - 6), sy(iz) + half); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx(ix) - half, sy(iz + 6)); ctx.lineTo(sx(ix) + half, sy(iz + 6)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx(ix) - half, sy(iz - 6)); ctx.lineTo(sx(ix) + half, sy(iz - 6)); ctx.stroke();
+    }
+  }
+  // 7. Search zone.
   if (state.wanted > 0) {
-    ctx.strokeStyle = 'rgba(255,60,60,0.9)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,60,60,0.9)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(cx + (state.searchZone.x - state.player.x) * scale, cy + (state.searchZone.z - state.player.z) * scale, state.searchZone.r * scale, 0, Math.PI * 2);
+    ctx.arc(sx(state.searchZone.x), sy(state.searchZone.z), state.searchZone.r * scale, 0, Math.PI * 2);
     ctx.stroke();
     ctx.fillStyle = 'rgba(255,60,60,0.12)';
     ctx.fill();
   }
-  // Shops.
+  // 8. Shops.
   ctx.fillStyle = '#ffc300';
   for (const s of SHOP_POSITIONS) {
-    const sx = cx + (s.x - state.player.x) * scale, sy = cy + (s.z - state.player.z) * scale;
-    if (sx > 0 && sx < W && sy > 0 && sy < H) { ctx.beginPath(); ctx.arc(sx, sy, 3, 0, Math.PI * 2); ctx.fill(); }
+    const X = sx(s.x);
+    const Y = sy(s.z);
+    if (X < 0 || X > W || Y < 0 || Y > H) continue;
+    ctx.beginPath();
+    ctx.arc(X, Y, 3, 0, Math.PI * 2);
+    ctx.fill();
   }
-  // Mission marker.
-  const mt = missionTarget(state);
-  if (mt) {
-    const mx = cx + (mt.x - state.player.x) * scale, my = cy + (mt.z - state.player.z) * scale;
+  // 9. Mission marker.
+  const target = missionTarget(state);
+  if (target) {
     ctx.fillStyle = '#ff9f43';
-    ctx.beginPath(); ctx.arc(mx, my, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(sx(target.x), sy(target.z), 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
-  // Police blips.
+  // 10. Police blips + heli blip.
   ctx.fillStyle = '#4d8dff';
   for (const cop of state.police) {
-    const px = cx + (cop.x - state.player.x) * scale, py = cy + (cop.z - state.player.z) * scale;
-    ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx(cop.x), sy(cop.z), 3.5, 0, Math.PI * 2);
+    ctx.fill();
   }
   if (state.heli && state.wanted >= 3) {
     ctx.fillStyle = '#ff5d8f';
-    const hx = cx + (state.heli.x - state.player.x) * scale, hy = cy + (state.heli.z - state.player.z) * scale;
-    ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx(state.heli.x), sy(state.heli.z), 4, 0, Math.PI * 2);
+    ctx.fill();
   }
-  // Player arrow.
+  // 11. Player arrow.
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(state.player.angle);
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(5, 6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.lineTo(5, 6);
+  ctx.lineTo(-5, 6);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
+  // 12. North indicator.
   ctx.restore();
-  // North indicator.
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center';
   ctx.fillText('N', cx, 14);
 }
 
