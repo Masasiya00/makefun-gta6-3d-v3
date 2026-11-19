@@ -40,11 +40,11 @@ export const CAR_MODELS = [
 ];
 
 export const WEAPONS = [
-  { id: 'fists', name: 'FISTS', price: 0, damage: 12, rate: 2.2, range: 2.2, ammo: Infinity, auto: false },
-  { id: 'pistol', name: 'VESPER', price: 350, damage: 22, rate: 3.5, range: 55, ammo: 72, auto: false },
-  { id: 'smg', name: 'MAKO', price: 1200, damage: 14, rate: 9, range: 48, ammo: 150, auto: true },
-  { id: 'shotgun', name: 'BREAKER', price: 2600, damage: 70, rate: 1.1, range: 26, ammo: 24, auto: false },
-  { id: 'rifle', name: 'KESTREL', price: 5200, damage: 45, rate: 6, range: 90, ammo: 60, auto: true },
+  { id: 'fists', name: 'FISTS', price: 0, damage: 12, rate: 2.2, range: 2.2, ammo: Infinity, mag: Infinity, auto: false },
+  { id: 'pistol', name: 'VESPER', price: 350, damage: 22, rate: 3.5, range: 55, ammo: 72, mag: 12, auto: false },
+  { id: 'smg', name: 'MAKO', price: 1200, damage: 14, rate: 9, range: 48, ammo: 150, mag: 30, auto: true },
+  { id: 'shotgun', name: 'BREAKER', price: 2600, damage: 70, rate: 1.1, range: 26, ammo: 24, mag: 6, auto: false },
+  { id: 'rifle', name: 'KESTREL', price: 5200, damage: 45, rate: 6, range: 90, ammo: 60, mag: 30, auto: true },
 ];
 
 export const RESPECT_RANKS = [
@@ -103,6 +103,7 @@ export function createState(seed) {
     missionDone: [], missionText: '', missionNext: '', missionProgress: 0,
     dialogue: null, dialogueT: 0,
     weaponsOwned: [true, false, false, false, false], ammo: [Infinity, 0, 0, 0, 0],
+    magAmmo: [Infinity, 12, 30, 6, 30], reloadT: 0, weaponSwitchT: 0,
     weaponIndex: 0, ownedCars: [], upgrades: { engine: false, brakes: false, plating: false },
     outfit: 0, radio: 0, muted: false, paused: false, started: false,
     busted: false, wasted: false, victory: false, gameOver: false,
