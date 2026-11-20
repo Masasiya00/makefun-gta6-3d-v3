@@ -203,8 +203,10 @@ export function applyShot(state, shotName, audio) {
     // (-z). The alley mouth opens onto the SA neighbourhood: pitched-roof
     // houses, the curved freeway overpass, billboards, power lines and
     // the downtown skyline in the orange haze. Camera is a dedicated
-    // elevated behind-character branch in main.js. 2 stars kept; the two
-    // pursuit cars stage on the x = 0 road west of the alley.
+    // close low behind-character branch in main.js (r7, meme framing:
+    // Mara large, lower right, shoulder height), and the shot carries
+    // the "Ah shit, here we go again." caption bottom-centre. 2 stars
+    // kept; the two pursuit cars stage on the x = 0 road west of the alley.
     state.clockMin = 17 * 60 + 50;
     state.player.x = 24;
     state.player.z = 26;
