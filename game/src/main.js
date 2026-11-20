@@ -145,15 +145,15 @@ function updateCamera(dt) {
     camera.lookAt(p.x + fwdX * 14, 2, p.z + fwdZ * 14);
     return;
   }
-  // r6e city shot: elevated behind-character framing for the SA alley.
-  // The camera sits behind and above Mara, looking down the dirt alley
-  // between the brick walls: she reads from behind in the lower centre,
-  // the walls frame the shot, and past the mouth the neighbourhood, the
-  // overpass and the skyline stack up in the haze. This branch sets the
-  // camera directly and returns before the normal chase easing.
+  // r7: close low behind-character framing for the SA alley, copying the
+  // "Ah shit, here we go again" meme frame: Mara large in the lower
+  // right, seen from just behind at shoulder height, the dirt alley and
+  // its tall brick walls running ahead to the neighbourhood, the overpass
+  // and the skyline stacked in the haze. This branch sets the camera
+  // directly and returns before the normal chase easing.
   if (state.cameraShot === 'city') {
-    camera.position.set(p.x, 7.5, p.z + 10);
-    camera.lookAt(p.x, 3.5, p.z - 26);
+    camera.position.set(p.x - 1.5, 3.0, p.z + 5.5);
+    camera.lookAt(p.x, 2.0, p.z - 30);
     return;
   }
   // Mouse look steers the camera yaw; while driving it eases back behind the car.
@@ -482,6 +482,16 @@ window.__game = { state, input, startMission, saveGame, loadGame, step };
 if (shotName) {
   applyShot(state, shotName, audio);
   updatePolice(state, 0, policeMeshes, world.scene);
+}
+// r7: the city shot copies the "Ah shit, here we go again" meme frame
+// for frame — the caption sits bottom-centre, bold white with a black
+// outline, exactly like the reference photo. DOM only, shown only for
+// the staged city screenshot; gameplay never sees it.
+if (shotName === 'city') {
+  const cap = document.createElement('div');
+  cap.textContent = 'Ah shit, here we go again.';
+  cap.style.cssText = 'position:fixed;left:50%;bottom:7%;transform:translateX(-50%);z-index:9999;pointer-events:none;white-space:nowrap;font:bold 30px Arial,Helvetica,sans-serif;color:#ffffff;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 0 8px #000;';
+  document.body.appendChild(cap);
 }
 if (state.autoplay) { state.started = true; }
 requestAnimationFrame(frame);
